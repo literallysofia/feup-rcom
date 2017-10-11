@@ -14,7 +14,7 @@
 #define SET_FLAG 0x7E
 #define SET_A 0x03
 #define SET_C 0x03
-#define SET_BCC 0x00
+#define SET_BCC SET_A^SET_C
 #define UA_FLAG 0x7E
 #define UA_A 0x03
 #define UA_C 0x07
@@ -161,11 +161,10 @@ void readRequestConnection(int fd){
 	printf("4\n");
         if(c==SET_FLAG){
 	         printf("Recebeu SET\n");
-	          write(fd,UA,5);
-	           printf("Enviou UA\n");
-	            state=5;
-              break;
-	}
+	         write(fd,UA,5);
+	         printf("Enviou UA\n");
+	         state=5;
+          }
         else
           state = 0;
       break;
