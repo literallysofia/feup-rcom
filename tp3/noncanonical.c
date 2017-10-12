@@ -5,25 +5,39 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <stdlib.h>
 
 #define BAUDRATE B38400
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
 #define FALSE 0
 #define TRUE 1
 
-#define SET_FLAG 0x7E
-#define SET_A 0x03
+#define FLAG 0x7E
+#define A 0x03
 #define SET_C 0x03
-#define SET_BCC SET_A^SET_C
-#define UA_FLAG 0x7E
-#define UA_A 0x03
+#define SET_BCC A^SET_C
 #define UA_C 0x07
-#define UA_BCC UA_A^UA_C
+#define UA_BCC A^UA_C
+#define C10 0x00
+#define C11 0x40
+#define Escape 0x7D
+#define escapeFlag 0x5E
+#define escapeEscape 0x5D
+#define RR_C0 0x05
+#define RR_C1 0x85
 
 
 volatile int STOP=FALSE;
 
-void readRequestConnection(int fd);
+void LLOPEN(int fd);
+
+char* LLREAD(int fd);
+
+int checkBCC2(char* message, int sizeMessage);
+
+int readControlMessage(int fd, unsigned char C);
 
 int main(int argc, char** argv)
 {
@@ -37,14 +51,10 @@ int main(int argc, char** argv)
       printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
       exit(1);
     }
-
-
   /*
     Open serial port device for reading and writing and not as controlling tty
     because we don't want to get killed if linenoise sends CTRL-C.
   */
-
-
     fd = open(argv[1], O_RDWR | O_NOCTTY );
     if (fd <0) {perror(argv[1]); exit(-1); }
 
@@ -64,30 +74,17 @@ int main(int argc, char** argv)
     newtio.c_cc[VTIME]    = 1;   /* inter-character timer unused */
     newtio.c_cc[VMIN]     = 0;   /* blocking read until 5 chars received */
 
-
-
   /*
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
     leitura do(s) próximo(s) caracter(es)
   */
 
-
-
     tcflush(fd, TCIOFLUSH);
-
-
 
     printf("New termios structure set\n");
 
-
-   /* int i = 0;
-    while(STOP == FALSE) {
-	res = read(fd,buf+i,1);
-	if(res == 1) {
-	    if (buf[i] == '\0') STOP = TRUE;
-	    i++;
-	}
-    }*/
+    LLOPEN(fd);
+    LLREAD(fd);
 
     sleep(1);
     if ( tcsetattr(fd,TCSANOW,&newtio) == -1) {
@@ -95,80 +92,225 @@ int main(int argc, char** argv)
       exit(-1);
     }
 
-
-
-    readRequestConnection(fd);
-
-
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
     return 0;
 }
 
-
-void readRequestConnection(int fd){
+//lê trama de controlo SET e manda trama UA
+void LLOPEN(int fd){
   unsigned char c;
   int state=0;
+  if(readControlMessage(fd,SET_C))
+	     sendControlMessage(fd,UA_C);
+  //TESTAR EM CASO DE ERRO
+ }
 
-  unsigned char UA[5] = {UA_FLAG, UA_A, UA_C, UA_BCC, UA_FLAG};
-
-  while(state!=5){
-
-    read(fd,&c,1);
-
-    switch(state){
-      //recebe flag
-      case 0:
-	printf("0\n");
-        if(c==SET_FLAG)
-          state=1;
+//lê uma mensagem, faz destuffing
+unsigned char * LLREAD(int fd){
+  unsigned char * message = (unsigned char *)malloc(0);
+  int sizeMessage = 0;
+  unsigned char c_read;
+  int trama = 0;
+    unsigned char c;
+    int state=0;
+    //printf("comecando o read\n");
+    while(state!=6){
+      read(fd,&c,1);
+	     //printf("%x\n",c);
+      switch(state){
+        //recebe flag
+        case 0:
+          if(c==FLAG)
+            state=1;
           break;
-      //recebe A
-      case 1:
-	printf("1\n");
-        if(c==SET_A)
-          state=2;
-        else
-          {
-            if(c==SET_FLAG)
+        //recebe A
+        case 1:
+  	     //printf("1state\n");
+          if(c==A)
+            state=2;
+          else
+            {
+              if(c==FLAG)
+                state=1;
+              else
+                state = 0;
+            }
+        break;
+        //recebe C
+        case 2:
+  	     	//printf("2state\n");
+          if(c==C10){
+            trama = 0;
+            c_read=c;
+            state = 3;
+          }else
+          if(c==C11){
+            trama=1;
+            c_read=c;
+            state=3;
+          }
+          else{
+            if(c==FLAG)
               state=1;
             else
               state = 0;
           }
-      break;
-      //recebe C
-      case 2:
-	printf("2\n");
-        if(c==SET_C)
-          state=3;
-        else{
-          if(c==SET_FLAG)
-            state=1;
+        break;
+        //recebe BCC
+        case 3:
+  	     //printf("3state\n");
+          if(c==(A ^ c_read))
+            state = 4;
           else
-            state = 0;
-        }
-      break;
-      //recebe BCC
-      case 3:
-	printf("3\n");
-        if(c==SET_BCC)
-          state = 4;
-        else
-          state=0;
-      break;
-      //recebe FLAG final
-      case 4:
-	printf("4\n");
-        if(c==SET_FLAG){
-	         printf("Recebeu SET\n");
-	         write(fd,UA,5);
-	         printf("Enviou UA\n");
-	         state=5;
+            state=0;
+        break;
+        //recebe FLAG final
+        case 4:
+  	     //printf("4state\n");
+          if(c==FLAG){
+  	         if(checkBCC2(message,sizeMessage)){
+			            state=6;
+			            //printf("supostamente acabou\n");
+			         }
+             else
+              {
+                //MANDAR MENSAGEM REJEITADO
+                printf("Erro na mensagem\n");
+                exit(-1);
+              }
+          }else
+          if(c == Escape){
+            state = 5;
           }
-        else
-          state = 0;
-      break;
+          else{
+            message = (unsigned char  *)realloc(message, ++sizeMessage);
+            message[sizeMessage-1] = c;
+          }
+        break;
+        case 5:
+        //printf("5state\n");
+        if(c==escapeFlag){
+          message = (unsigned char  *)realloc(message, ++sizeMessage);
+          message[sizeMessage-1] = FLAG;
+        }
+        else{
+          if (c==escapeEscape){
+            message = (unsigned char  *)realloc(message, ++sizeMessage);
+            message[sizeMessage-1] = Escape;
+          }
+          else
+            {
+              perror("Non valid character after escape character");
+              exit(-1);
+            }
+        }
+        state=4;
+        break;
+      }
 
     }
-  }
+
+    if(trama == 0)
+      sendControlMessage(fd,RR_C1);
+    else
+      sendControlMessage(fd,RR_C0);
+
+    //VER SE CONSEGUIMOS FAZER RETURN DA MENSAGEM VISTO QUE A MENSAGEM TEM OS DADOS E O BCC2
+    /*message = (unsigned char*)malloc(sizeMessage-1);
+    i=0;
+    for(; i < sizeMessage-1; i++){
+      printf("%x\n",message[i]);
+    }*/
 }
+
+  //vê se o BCC2 recebido está certo
+  int checkBCC2(char* message, int sizeMessage){
+    int i =1;
+    char BCC2=message[0];
+    for(; i < sizeMessage-1;i++){
+      BCC2 ^= message[i];
+    }
+    if (BCC2 == message[sizeMessage - 1]) {
+      return TRUE;
+    }
+    else
+      return FALSE;
+  }
+
+//manda uma trama de controlo
+  void sendControlMessage(int fd,unsigned char C){
+    unsigned char message[5];
+    message[0]=FLAG;
+    message[1]= A;
+    message[2]=C;
+    message[3]=message[1]^message[2];
+    message[4]=FLAG;
+
+    write(fd,message,5);
+  }
+
+//lê uma trama de controlo
+  int readControlMessage(int fd, unsigned char C){
+
+    int state=0;
+    unsigned char c;
+
+    while(state!=5){
+
+      read(fd,&c,1);
+
+      switch(state){
+        //recebe flag
+        case 0:
+  	     //printf("0\n");
+          if(c==FLAG)
+            state=1;
+            break;
+        //recebe A
+        case 1:
+  	     //printf("1\n");
+          if(c==A)
+            state=2;
+          else
+            {
+              if(c==FLAG)
+                state=1;
+              else
+                state = 0;
+            }
+        break;
+        //recebe C
+        case 2:
+  	     //printf("2\n");
+          if(c==C)
+            state=3;
+          else{
+            if(c==FLAG)
+              state=1;
+            else
+              state = 0;
+          }
+        break;
+        //recebe BCC
+        case 3:
+  	     //printf("3\n");
+          if(c==(A^C))
+            state = 4;
+          else
+            state=0;
+        break;
+        //recebe FLAG final
+        case 4:
+  	       //printf("4\n");
+          if(c==FLAG){
+  	         //printf("Recebeu mensagem\n");
+  	         state=5;
+            }
+          else
+            state = 0;
+        break;
+      }
+    }
+      return TRUE;
+  }

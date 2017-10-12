@@ -16,7 +16,6 @@
 #define FALSE 0
 #define TRUE 1
 
-////////////////////////////////////////////////////
 #define FLAG 0x7E
 #define A 0x03
 #define SET_C 0x03
@@ -35,24 +34,23 @@ volatile int STOP=FALSE;
 
 void LLOPEN(int fd, int x);
 
-void LLWRITE(int fd, char* mensagem, int size);
+void LLWRITE(int fd, unsigned char* mensagem, int size);
 
-char calculoBCC2(char* mensagem, int size);
+unsigned char calculoBCC2(unsigned char* mensagem, int size);
 
 int sumAlarms=0;
-
 int flagAlarm = FALSE;
 int trama = 0;
 int paragem = FALSE;
 
-//handler
+//handler do sinal de alarme
 void alarmHandler(){
   printf("Alarm=%d\n", sumAlarms);
   flagAlarm=TRUE;
   sumAlarms++;
 }
 
-int main(int argc, char** argv)
+int main(int argc, unsigned char** argv)
 {
   int fd, c, res;
   struct termios oldtio,newtio;
@@ -85,8 +83,8 @@ int main(int argc, char** argv)
   /* set input mode (non-canonical, no echo,...) */
   newtio.c_lflag = 0;
 
-  newtio.c_cc[VTIME]    = 1;   /* inter-character timer unused */
-  newtio.c_cc[VMIN]     = 0;   /* blocking read until 5 chars received */
+  newtio.c_cc[VTIME]    = 1;   /* inter-unsigned character timer unused */
+  newtio.c_cc[VMIN]     = 0;   /* blocking read until 5 unsigned chars received */
 
   /*
   VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
@@ -105,10 +103,10 @@ int main(int argc, char** argv)
   // instalar handler do alarme
   (void)signal(SIGALRM,alarmHandler);
 
-  char mensagem[] = "Hello World";
-
-  //LLOPEN(fd,0);
-  LLWRITE(fd,mensagem,strlen(mensagem));
+  //mensagem a enviar
+  unsigned char mensagem[] = "Hello World";
+  LLOPEN(fd,0);
+  LLWRITE(fd,mensagem,sizeof(mensagem));
 
   sleep(1);
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
@@ -121,25 +119,21 @@ int main(int argc, char** argv)
 }
 
 
-
+//manda a trama SET através da porta série para o recetor, para "avisar" que vai começar a mandar dados
 void LLOPEN(int fd, int x){
 
-  unsigned char SET[5] = {FLAG,A,SET_C, SET_BCC,FLAG};
 	unsigned char c;
-
   do {
-    write(fd,SET,5);
-    printf("mandou set\n");
+    sendControlMessage(fd,SET_C);
+    //printf("mandou set\n");
     alarm(3);
     flagAlarm=0;
-
-
     int state=0;
 
     while(!paragem && !flagAlarm){
       read(fd,&c,1);
-	printf("%x\n",c);
-      switch(state){
+	     //printf("%x\n",c);
+       switch(state){
         //recebe flag
         case 0:
           //printf("state = %d \n",state );
@@ -148,7 +142,7 @@ void LLOPEN(int fd, int x){
           break;
         //recebe A
         case 1:
-          printf("state = %d \n",state );
+          //printf("state = %d \n",state );
           if(c==A)
             state=2;
           else
@@ -161,7 +155,7 @@ void LLOPEN(int fd, int x){
           break;
         //recebe C
         case 2:
-          printf("state = %d \n",state );
+          //printf("state = %d \n",state );
           if(c==UA_C)
             state=3;
           else{
@@ -173,7 +167,7 @@ void LLOPEN(int fd, int x){
         break;
         //recebe BCC
         case 3:
-          printf("state = %d \n",state );
+          //printf("state = %d \n",state );
           if(c == UA_BCC)
             state = 4;
           else
@@ -181,11 +175,11 @@ void LLOPEN(int fd, int x){
         break;
         //recebe FLAG final
         case 4:
-          printf("state = %d \n",state );
+          //printf("state = %d \n",state );
           if(c==FLAG){
             paragem=TRUE;
             alarm(0);
-            printf("recebeu ua\n");
+            //printf("recebeu ua\n");
           }
           else
             state = 0;
@@ -196,10 +190,11 @@ void LLOPEN(int fd, int x){
 
 }
 
+//faz stuffing de uma mensagem e, de seguida, manda-a através da porta série
+void LLWRITE(int fd, unsigned char* mensagem, int size){
 
-void LLWRITE(int fd, char* mensagem, int size){
-  char BCC2;
-  char* mensagemFinal = (char*)malloc((size+6)*sizeof(char));
+  unsigned char BCC2;
+  unsigned char* mensagemFinal = (unsigned char*)malloc((size+6)*sizeof(unsigned char));
   int sizeMensagemFinal = size + 6;
   BCC2 = calculoBCC2(mensagem,size);
   mensagemFinal[0]= FLAG;
@@ -217,14 +212,14 @@ void LLWRITE(int fd, char* mensagem, int size){
   int j=4;
   for(; i < size; i++){
     if(mensagem[i] == FLAG){
-      mensagemFinal = (char*)realloc(mensagemFinal, ++sizeMensagemFinal);
+      mensagemFinal = (unsigned char*)realloc(mensagemFinal, ++sizeMensagemFinal);
       mensagemFinal[j]=Escape;
       mensagemFinal[j+1]=escapeFlag;
       j = j+2;
     }
     else{
       if(mensagem[i]==Escape){
-        mensagemFinal = (char*)realloc(mensagemFinal, ++sizeMensagemFinal);
+        mensagemFinal = (unsigned char*)realloc(mensagemFinal, ++sizeMensagemFinal);
         mensagemFinal[j]=Escape;
         mensagemFinal[j+1]=escapeEscape;
         j = j+2;
@@ -238,16 +233,95 @@ void LLWRITE(int fd, char* mensagem, int size){
   mensagemFinal[j]=BCC2;
   mensagemFinal[j+1]=FLAG;
 
-  i =0;
+  //printf("mensagem final\n");
+  /*i =0;
   for(; i < sizeMensagemFinal;i++){
     printf("%x\n",mensagemFinal[i] );
-  }
+  }*/
 
-
+  //mandar mensagem
+  write(fd,mensagemFinal,sizeMensagemFinal);
 }
 
-char calculoBCC2(char* mensagem, int size){
-  char BCC2 = mensagem[0];
+//manda uma qualquer trama de controlo
+void sendControlMessage(int fd, unsigned char C){
+  unsigned char message[5];
+  message[0]=FLAG;
+  message[1]=A;
+  message[2]=C;
+  message[3]=message[1]^message[2];
+  message[4]=FLAG;
+  /*printf("%x\n", message[0]);
+  printf("%x\n", message[1]);
+  printf("%x\n", message[2]);
+  printf("%x\n", message[3]);
+  printf("%x\n", message[4]);*/
+  write(fd,message,5);
+}
+
+//lê uma qualquer trama de controlo
+int readControlMessage(int fd, unsigned char C){
+  int state=0;
+  unsigned char c;
+
+  while(state != 5){
+    read(fd,&c,1);
+    switch(state){
+      //recebe FLAG
+      case 0:
+      //print("0\n");
+      if(c==FLAG)
+        state=1;
+        break;
+      //recebe A
+      case 1:
+      //printf("1\n");
+      if(c==A)
+        state=2;
+      else{
+        if(c==FLAG)
+          state=1;
+        else
+          state=0;
+      }
+      break;
+      //recebe c
+      case 2:
+        //printf("2\n");
+        if(c==C)
+          state=3;
+        else{
+          if(c==FLAG)
+            state=1;
+          else
+            state=0;
+        }
+        break;
+      //recebe BCC
+      case 3:
+      //printf("3\n");
+      if(c==(A^C))
+        state=4;
+      else
+        state=0;
+      break;
+      //recebe FLAG final
+      case 4:
+        //printf("4\n");
+        if(c==FLAG)
+          //printf("recebeu mensagem controlo\n");
+          state=5;
+        else
+          state=0;
+      break;
+    }
+    return TRUE;
+  }
+}
+
+//calculo do BCC2 de uma mensagem
+unsigned char calculoBCC2(unsigned char* mensagem, int size){
+  unsigned char BCC2 = mensagem[0];
   int i;
   for(i=1; i < size; i++){
     BCC2^=mensagem[i];
