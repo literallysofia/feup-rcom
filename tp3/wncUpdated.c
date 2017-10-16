@@ -28,6 +28,8 @@
 #define Escape 0x7D
 #define escapeFlag 0x5E
 #define escapeEscape 0x5D
+#define C2Start 0x02
+#define C2End 0x03
 
 
 volatile int STOP=FALSE;
@@ -40,7 +42,11 @@ unsigned char calculoBCC2(unsigned char* mensagem, int size);
 
 void sendControlMessage(int fd, unsigned char C);
 
-unsigned char* stuffingBCC2(unsigned char BCC2,int sizeBCC2);
+unsigned char* stuffingBCC2(unsigned char BCC2,int* sizeBCC2);
+
+FILE* openFile(unsigned char* fileName, unsigned int* sizeFile);
+
+unsigned char* controlPackageI(unsigned char state, unsigned int* sizeFile, unsigned char* fileName);
 
 int sumAlarms=0;
 int flagAlarm = FALSE;
@@ -60,8 +66,10 @@ int main(int argc, unsigned char** argv)
   struct termios oldtio,newtio;
   char buf[255];
   int i, sum = 0, speed = 0;
+  FILE* f;
+  unsigned int sizeFile;
 
-  if ( (argc < 2) ||
+  if ( (argc < 3) ||
   ((strcmp("/dev/ttyS0", argv[1])!=0) &&
   (strcmp("/dev/ttyS1", argv[1])!=0) )) {
     printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
@@ -73,6 +81,10 @@ int main(int argc, unsigned char** argv)
   */
   fd = open(argv[1], O_RDWR | O_NOCTTY );
   if (fd <0) {perror(argv[1]); exit(-1); }
+
+  f = openFile(argv[2], &sizeFile);
+
+
 
   if ( tcgetattr(fd,&oldtio) == -1) { /* save current port settings */
     perror("tcgetattr");
@@ -347,22 +359,62 @@ unsigned char calculoBCC2(unsigned char* mensagem, int size){
   return BCC2;
 }
 
-unsigned char* stuffingBCC2(unsigned char BCC2, int sizeBCC2){
+unsigned char* stuffingBCC2(unsigned char BCC2, int* sizeBCC2){
 
   if(BCC2 == FLAG){
       unsigned char* BCC2Stuffed= (unsigned char*)malloc(2*sizeof(unsigned char*));
       BCC2Stuffed[0]=Escape;
       BCC2Stuffed[1]=escapeFlag;
-      sizeBCC2++;
+      (*sizeBCC2)++;
   }
   else{
     if(BCC2==Escape){
       unsigned char* BCC2Stuffed= (unsigned char*)malloc(2*sizeof(unsigned char*));
       BCC2Stuffed[0]=Escape;
       BCC2Stuffed[1]=escapeEscape;
-      sizeBCC2++;
+      (*sizeBCC2)++;
     }
   }
 
   return BCC2Stuffed;
+}
+
+
+
+FILE* openFile(unsigned char* fileName, unsigned int* sizeFile){
+  FILE* f;
+  struct stat metadata;
+
+  if((f = fopen(fileName, "rb"))== NULL){
+    perror("error opening file!");
+    exit(-1);
+  }
+  stat(fileName,&metadata);
+  (*sizeFile) = metadata.st_size;
+  printf("This file has %d bytes \n",sizeFile);
+
+  return f;
+}
+
+unsigned char* controlPackageI(unsigned char state, unsigned int* sizeFile, unsigned char* fileName){
+
+  unsigned char L1 = sizeof(unsigned int);
+  unsigned char L2 = strlen(fileName);
+  unsigned char* package = (unsigned char*)malloc(5 + L1 + L2);
+  if(state==C2Start)
+    package[0]=C2Start;
+  else
+    package[0]=C2End;
+  package[1]=0;
+  package[2]=L1;
+  package[3]= (unsigned char)(*sizeFile);
+  package[4]=1;
+  package[5]=L2;
+
+  int i;
+  int j = 6;
+  for(i=0; i < strlen(fileName); i++,j++){
+    package[j]=fileName[i];
+  }
+  return package;
 }
