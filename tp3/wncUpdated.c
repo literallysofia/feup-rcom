@@ -40,6 +40,8 @@ unsigned char calculoBCC2(unsigned char* mensagem, int size);
 
 void sendControlMessage(int fd, unsigned char C);
 
+unsigned char* stuffingBCC2(unsigned char BCC2,int sizeBCC2);
+
 int sumAlarms=0;
 int flagAlarm = FALSE;
 int trama = 0;
@@ -195,9 +197,13 @@ void LLOPEN(int fd, int x){
 void LLWRITE(int fd, unsigned char* mensagem, int size){
 
   unsigned char BCC2;
+  unsigned char* BCC2Stuffed = (unsigned char*)malloc(sizeof(unsigned char));
   unsigned char* mensagemFinal = (unsigned char*)malloc((size+6)*sizeof(unsigned char));
   int sizeMensagemFinal = size + 6;
+  int sizeBCC2=1;
   BCC2 = calculoBCC2(mensagem,size);
+  BCC2Stuffed = stuffingBCC2(BCC2,&sizeBCC2);
+
   mensagemFinal[0]= FLAG;
   mensagemFinal[1]=A;
   if(trama == 0){
@@ -231,7 +237,15 @@ void LLWRITE(int fd, unsigned char* mensagem, int size){
       }
     }
   }
-  mensagemFinal[j]=BCC2;
+
+  if(sizeBCC2 == 1)
+    mensagemFinal[j]=BCC2;
+  else{
+    mensagemFinal = (unsigned char*)realloc(mensagemFinal, ++sizeMensagemFinal);
+    mensagemFinal[j]=BCC2Stuffed[0];
+    mensagemFinal[j+1]=BCC2Stuffed[1];
+    j++;
+  }
   mensagemFinal[j+1]=FLAG;
 
   //printf("mensagem final\n");
@@ -331,4 +345,24 @@ unsigned char calculoBCC2(unsigned char* mensagem, int size){
     BCC2^=mensagem[i];
   }
   return BCC2;
+}
+
+unsigned char* stuffingBCC2(unsigned char BCC2, int sizeBCC2){
+
+  if(BCC2 == FLAG){
+      unsigned char* BCC2Stuffed= (unsigned char*)malloc(2*sizeof(unsigned char*));
+      BCC2Stuffed[0]=Escape;
+      BCC2Stuffed[1]=escapeFlag;
+      sizeBCC2++;
+  }
+  else{
+    if(BCC2==Escape){
+      unsigned char* BCC2Stuffed= (unsigned char*)malloc(2*sizeof(unsigned char*));
+      BCC2Stuffed[0]=Escape;
+      BCC2Stuffed[1]=escapeEscape;
+      sizeBCC2++;
+    }
+  }
+
+  return BCC2Stuffed;
 }
