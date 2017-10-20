@@ -154,7 +154,7 @@ int main(int argc, char** argv){
     /////////////////////////////////////
     printf("MENSAGEM:\n");
 	for(; i < sizeFile;i++){ //???????????????????????
-		printf("%c",giant[i]);
+		printf("%x",giant[i]);
 	}
 
     printf("NOME DO FILE:\n");
@@ -310,7 +310,7 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
 
 
     //message tem BCC2 no fim
-    message = (unsigned char*)realloc(message,*sizeMessage-1);
+    //message = (unsigned char*)realloc(message,*sizeMessage-1);
     i=0;
 	*sizeMessage = *sizeMessage - 1;
     if(mandarDados){
@@ -338,7 +338,7 @@ unsigned char* isStartMessage(int fd,int* sizeOfStart){
   //vê se o BCC2 recebido está certo
 int checkBCC2(unsigned char* message, int sizeMessage){
     int i =1;
-    char BCC2=message[0];
+    unsigned char BCC2=message[0];
     for(; i < sizeMessage-1;i++){
       BCC2 ^= message[i];
     }
@@ -443,7 +443,7 @@ int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int si
     if(end[0] == C2End){
       for(;s < sizeStart; s++,e++){
         if(start[s] != end[e]){
-          printf("start s: %c end e: %c\n", start[s], end[e]);
+
           return FALSE;
         }
       }
@@ -457,7 +457,7 @@ int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int si
 }
 
 off_t sizeOfFileFromStart(unsigned char * start){
-  return (off_t)start[3];
+  return (start[3]<<24) | (start[4] << 16)  | (start[5] << 8)  | (start[6]);
 }
 
 unsigned char* nameOfFileFromStart(unsigned char * start){
@@ -483,8 +483,11 @@ unsigned char* nameOfFileFromStart(unsigned char * start){
 
 void createFile(unsigned char * mensagem, int sizeFile,unsigned char *filename){
   int i;
+  //char pasta[256];
+  //getcwd(pasta, 256);
+	FILE * file = fopen((char*) filename, "wb");
+	size_t bytes_written_to_file = fwrite(mensagem, 1, (size_t)sizeFile, file);
 
-	FILE * file = fopen(filename, "wb+");
-	size_t bytes_written_to_file = fwrite((void *)mensagem, 1, (size_t)sizeFile, file);
-	printf("New file created\n");
+  printf("New file created\n");
+
 }
