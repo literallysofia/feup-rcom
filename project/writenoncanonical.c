@@ -40,7 +40,7 @@
 #define L2 0x0B
 #define DISC 0x0B
 #define headerC 0x01
-#define sizePacketConst 7
+#define sizePacketConst 1000
 
 int sumAlarms=0;
 int flagAlarm = FALSE;
@@ -528,7 +528,10 @@ unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned cha
     package[0]=C2End;
   package[1]=T1;
   package[2]=L1;
-  package[3]= sizeFile;
+  package[3]= (sizeFile >> 24) & 0xFF;
+  package[4]=(sizeFile >> 16) & 0xFF;
+  package[5]=(sizeFile >> 8) & 0xFF;
+  package[6]=sizeFile & 0xFF;
   package[7]=T2;
   package[8]=sizeOfFileName;
   int i=0;
@@ -536,6 +539,10 @@ unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned cha
   for(; i < sizeOfFileName;i++,j++){
     package[j]=fileName[i];
   }
-
+  printf("SIZE OF FILE \n" );
+  printf("%x\n",package[3]);
+  printf("%x\n",package[4]);
+  printf("%x\n",package[5]);
+  printf("%x\n",package[6]);
   return package;
 }
