@@ -52,7 +52,7 @@ volatile int STOP=FALSE;
 
 int LLOPEN(int fd, int x);
 
-void LLWRITE(int fd, unsigned char* mensagem, int size);
+int LLWRITE(int fd, unsigned char* mensagem, int size);
 
 unsigned char calculoBCC2(unsigned char* mensagem, int size);
 
@@ -70,9 +70,11 @@ unsigned char* headerAL(unsigned char* mensagem, off_t sizeFile, int * sizePacke
 
 unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile);
 
+void sendFinalMessage(int fd);
+
 //handler do sinal de alarme
 void alarmHandler(){
-  printf("Alarm=%d\n", sumAlarms);
+  printf("Alarm=%d\n", sumAlarms+1);
   flagAlarm=TRUE;
   sumAlarms++;
 }
@@ -86,6 +88,7 @@ int main(int argc, unsigned char** argv){
   off_t sizeFile; //tamanho do ficheiro em bytes
   size_t indice=0;
   int sizeControlPackageI=0;
+
 
   if ( (argc < 3) ||
   ((strcmp("/dev/ttyS0", argv[1])!=0) &&
@@ -141,16 +144,16 @@ int main(int argc, unsigned char** argv){
   if(!LLOPEN(fd,0)){
     return -1;
   }
-  
-  
+
+
 
   int sizeOfFileName = strlen(argv[2]);
     unsigned char * fileName = (unsigned char*) malloc(sizeOfFileName);
      fileName = (unsigned char*)argv[2];
     i = 0;
-	
+
   unsigned char * start = controlPackageI(C2Start, sizeFile, fileName, sizeOfFileName, &sizeControlPackageI);
-  
+
   LLWRITE(fd,start,sizeControlPackageI);
   printf("MANDEI START\n");
 
@@ -165,14 +168,19 @@ int main(int argc, unsigned char** argv){
     int headerSize = sizePacket;
     unsigned char* mensagemHeader = headerAL(packet,sizeFile,&headerSize);
     //envia a mensagem
-    LLWRITE(fd,mensagemHeader,headerSize);
+    if(!LLWRITE(fd,mensagemHeader,headerSize)){
+      printf("Limite de alarmes atingido\n");
+      return -1;
+    }
   }
 
   unsigned char * end = controlPackageI(C2End, sizeFile, fileName, sizeOfFileName, &sizeControlPackageI);
   LLWRITE(fd,end,sizeControlPackageI);
   printf("MANDEI END\n");
 
+  sendFinalMessage(fd);
   sleep(1);
+
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
     perror("tcsetattr");
     exit(-1);
@@ -291,7 +299,7 @@ int LLOPEN(int fd, int x){
 }
 
 //faz stuffing de uma mensagem e, de seguida, manda-a através da porta série
-void LLWRITE(int fd, unsigned char* mensagem, int size){
+int LLWRITE(int fd, unsigned char* mensagem, int size){
 
   unsigned char BCC2;
   unsigned char* BCC2Stuffed = (unsigned char*)malloc(sizeof(unsigned char));
@@ -300,6 +308,7 @@ void LLWRITE(int fd, unsigned char* mensagem, int size){
   int sizeBCC2=1;
   BCC2 = calculoBCC2(mensagem,size);
   BCC2Stuffed = stuffingBCC2(BCC2,&sizeBCC2);
+  int rejeitado = FALSE;
 
   mensagemFinal[0]= FLAG;
   mensagemFinal[1]=A;
@@ -343,15 +352,9 @@ void LLWRITE(int fd, unsigned char* mensagem, int size){
   }
   mensagemFinal[j+1]=FLAG;
 
-  //printf("mensagem final\n");
-  /*i =0;
-  for(; i < sizeMensagemFinal;i++){
-    printf("%x\n",mensagemFinal[i] );
-  }*/
-
   //mandar mensagem
   int res;
-  
+
   printf("size mensagem enviada %d",sizeMensagemFinal);
 
   do{
@@ -363,15 +366,24 @@ void LLWRITE(int fd, unsigned char* mensagem, int size){
   unsigned char C = readControlMessage(fd);
   if((C==CRR1 && trama == 0) || (C==CRR0 && trama == 1) ){
     printf("recebeu rr\n");
+    rejeitado=FALSE;
+    sumAlarms=0;
     trama ^= 1;
+    alarm(0);
   }
   else {
-    if(C== CREJ1){
-      printf("recebeu rej1\n");
+    if(C== CREJ1 || C==CREJ0){
+      rejeitado = TRUE;
+      printf("recebeu rej\n");
+      alarm(0);
     }
-
   }
-	} while(flagAlarm && sumAlarms < NUMMAX);
+
+} while((flagAlarm && sumAlarms < NUMMAX) || rejeitado);
+  if(sumAlarms >= NUMMAX)
+    return FALSE;
+    else
+    return TRUE;
 }
 
 //manda uma qualquer trama de controlo
@@ -394,7 +406,6 @@ unsigned char readControlMessage(int fd){
 
   while(!flagAlarm && state!=5){
     read(fd,&c,1);
-
     switch(state){
       //recebe FLAG
       case 0:
@@ -417,7 +428,7 @@ unsigned char readControlMessage(int fd){
       //recebe c
       case 2:
         //printf("state 2\n");
-        if(c==CRR0 || c==CRR1 || c==CREJ0 ||  c==CREJ1){
+        if(c==CRR0 || c==CRR1 || c==CREJ0 ||  c==CREJ1 || c==DISC){
           C=c;
           state=3;
         }
@@ -448,12 +459,12 @@ unsigned char readControlMessage(int fd){
             state=5;
             return C;
         }
-
         else
           state=0;
       break;
     }
   }
+  return 0xFF;
 }
 
 
@@ -511,7 +522,7 @@ unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile){
 unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned char* fileName, int sizeOfFileName, int* sizeControlPackageI){
     *sizeControlPackageI = 9*sizeof(unsigned char)+sizeOfFileName;
   unsigned char* package = (unsigned char*)malloc(*sizeControlPackageI);
- 
+
   if(state==C2Start)
     package[0]=C2Start;
   else
@@ -519,13 +530,30 @@ unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned cha
   package[1]=T1;
   package[2]=L1;
   package[3]= (sizeFile >> 24) & 0xFF;
-package[4]= (sizeFile >> 16) & 0xFF;
-package[5]= (sizeFile >> 8) & 0xFF;
-package[6]= sizeFile & 0xFF;
+  package[4]= (sizeFile >> 16) & 0xFF;
+  package[5]= (sizeFile >> 8) & 0xFF;
+  package[6]= sizeFile & 0xFF;
   package[7]=T2;
   package[8]=sizeOfFileName;
-  int i;
-  int j = 9;
-  
   return package;
+}
+
+void sendFinalMessage(int fd){
+
+  sendControlMessage(fd,DISC);
+  printf("mandou DISC\n");
+  unsigned char C;
+  //espera ler o DISC
+  C = readControlMessage(fd);
+  printf("valor do c %x\n",C );
+
+  while(C!=DISC){
+    C = readControlMessage(fd);
+    printf("valor do c %x\n",C );
+  }
+
+  printf("leu disc\n");
+
+  sendControlMessage(fd,UA_C);
+  printf("mandou ua\n");
 }
