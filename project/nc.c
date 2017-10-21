@@ -30,7 +30,7 @@
 #define RR_C1 0x85
 #define REJ_C0 0x01
 #define REJ_C1 0x81
-#define DISC 0x0B
+#define DISC_C 0x0B
 #define C2End 0x03
 
 volatile int STOP=FALSE;
@@ -53,6 +53,8 @@ off_t sizeOfFileFromStart(unsigned char * start);
 int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd);
 
 void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char * filename);
+
+void sendFinalMessage (int fd);
 
 int main(int argc, char** argv){
     int fd,c, res;
@@ -118,19 +120,18 @@ int main(int argc, char** argv){
 
     while(TRUE){
       mensagemPronta = LLREAD(fd, &sizeMessage);
-	if(sizeMessage == 0)
-		continue;
-	printf("size message no main %d\n",sizeMessage);
+			if(sizeMessage == 0)
+			continue;
+			printf("size message no main %d\n",sizeMessage);
       if(isEndMessage(start,sizeOfStart,mensagemPronta,sizeMessage)){
-	printf("End message received\n");
-	 break;
+					printf("End message received\n");
+	 	break;
 	}
 
       int sizeWithoutHeader = 0;
 
       mensagemPronta = removeHeader(mensagemPronta,sizeMessage,&sizeWithoutHeader);
 
-	printf("manel\n");
       memcpy(giant+index,mensagemPronta,sizeWithoutHeader);
       index += sizeWithoutHeader;
     }
@@ -141,19 +142,29 @@ int main(int argc, char** argv){
 		printf("%x",giant[i]);
 	}
 
-printf("\n");
+	printf("\n");
 	printf("mandar create file\n" );
-	createFile(giant,&sizeOfGiant,argv[3]);
-
+	createFile(giant,&sizeOfGiant,(unsigned char*)argv[2]);
 	printf("depois do create file\n");
 
+	sendFinalMessage(fd);
 
-
+		//printf("%s\n", argv[3]);
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
     return 0;
 }
+
+void sendFinalMessage (int fd){
+	readControlMessage(fd, DISC_C);
+	printf("Recebeu DISC\n");
+	sendControlMessage(fd, DISC_C);
+	printf("Mandou DISC\n");
+	readControlMessage(fd, UA_C);
+	printf("Recebeu UA\n");
+}
+
 //lê trama de controlo SET e manda trama UA
 void LLOPEN(int fd){
   if(readControlMessage(fd,SET_C))
@@ -310,7 +321,7 @@ int checkBCC2(unsigned char* message, int sizeMessage){
       BCC2 ^= message[i];
     }
     if (BCC2 == message[sizeMessage - 1]) {
-      return TRUE;
+			return TRUE;
     }
     else
       return FALSE;
@@ -420,8 +431,9 @@ off_t sizeOfFileFromStart(unsigned char * start){
 }
 
 
-void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char * filename){
-	FILE* file = fopen("pinguim.gif", "wb+");
+void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char filename[]){
+	FILE* file = fopen(filename, "wb+");
+
 	printf("depois do fopen\n");
 	size_t bytes_written_to_file = fwrite((void *)mensagem, 1, *sizeFile, file);
 	printf("%zd\n",*sizeFile);
