@@ -32,7 +32,6 @@
 #define REJ_C1 0x81
 #define DISC 0x0B
 #define C2End 0x03
-#define C2Start 0x02
 
 volatile int STOP=FALSE;
 int esperado = 0;
@@ -51,12 +50,9 @@ unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * siz
 
 off_t sizeOfFileFromStart(unsigned char * start);
 
-unsigned char* nameOfFileFromStart(unsigned char * start);
-
 int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd);
-unsigned char* isStartMessage(int fd,int* sizeOfStart);
 
-void createFile(unsigned char * mensagem, int sizeFile,unsigned char * filename);
+void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char * filename);
 
 int main(int argc, char** argv){
     int fd,c, res;
@@ -70,7 +66,7 @@ int main(int argc, char** argv){
     unsigned char * giant;
     off_t index = 0;
 
-    if ( (argc < 2) ||
+    if ( (argc < 3) ||
   	     ((strcmp("/dev/ttyS0", argv[1])!=0) &&
   	      (strcmp("/dev/ttyS1", argv[1])!=0) )) {
       printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
@@ -114,24 +110,17 @@ int main(int argc, char** argv){
     }
 
     LLOPEN(fd);
-    start = isStartMessage(fd,&sizeOfStart);
+    start = LLREAD(fd,&sizeOfStart);
 
     sizeOfGiant = sizeOfFileFromStart(start);
-    unsigned char* nameOfGiant = nameOfFileFromStart (start);
     giant = (unsigned char*)malloc(sizeOfGiant);
-
-    printf("NAME OF FILE: ");
-    int p;
-    for(p=0; p < 11; p++){
-      printf("%c", nameOfGiant[p]);
-    }
-    printf("\n");
+	printf("yayy\n");
 
     while(TRUE){
       mensagemPronta = LLREAD(fd, &sizeMessage);
 	if(sizeMessage == 0)
 		continue;
-
+	printf("size message no main %d\n",sizeMessage);
       if(isEndMessage(start,sizeOfStart,mensagemPronta,sizeMessage)){
 	printf("End message received\n");
 	 break;
@@ -141,31 +130,25 @@ int main(int argc, char** argv){
 
       mensagemPronta = removeHeader(mensagemPronta,sizeMessage,&sizeWithoutHeader);
 
-
+	printf("manel\n");
       memcpy(giant+index,mensagemPronta,sizeWithoutHeader);
       index += sizeWithoutHeader;
     }
     //meter o array gigante no file
+	printf("antes do printf\n");
   	int i = 0;
-
-    /////////////////////////////////
-    //experiencia
-    off_t sizeFile=sizeOfGiant;
-    /////////////////////////////////////
-    printf("MENSAGEM:\n");
-	for(; i < sizeFile;i++){ //???????????????????????
+	for(; i < sizeOfGiant;i++){
 		printf("%x",giant[i]);
 	}
 
-    printf("NOME DO FILE:\n");
-    i=0;
-    for(; i < 11;i++){ //???????????????????????
-  		printf("%c",nameOfGiant[i]);
-  	}
+printf("\n");
+	printf("mandar create file\n" );
+	createFile(giant,&sizeOfGiant,argv[3]);
 
-    printf("\nSIZE DO FILE: %zd\n", sizeFile);
+	printf("depois do create file\n");
 
-	   createFile(giant,sizeOfGiant,nameOfGiant);
+
+
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
@@ -300,18 +283,12 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
         break;
 
       }
-    }
-    printf("recebeu mensagem:\n");
-    int i = 0;
-    for (; i < *sizeMessage; i++) {
-      printf("%x|",message[i]);
-    }
-    printf("\n");
 
-
+  }
+	printf("size message %d\n", *sizeMessage);
     //message tem BCC2 no fim
-    //message = (unsigned char*)realloc(message,*sizeMessage-1);
-    i=0;
+    message = (unsigned char*)realloc(message,*sizeMessage-1);
+    int i=0;
 	*sizeMessage = *sizeMessage - 1;
     if(mandarDados){
       if(trama==esperado){
@@ -323,16 +300,6 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
     else
       *sizeMessage=0;
     return message;
-}
-
-unsigned char* isStartMessage(int fd,int* sizeOfStart){
-  unsigned char* start = LLREAD(fd,sizeOfStart);
-
-  while(start[0]!= C2Start){
-    start = LLREAD(fd,sizeOfStart);
-  }
-
-  return start;
 }
 
   //vê se o BCC2 recebido está certo
@@ -347,8 +314,6 @@ int checkBCC2(unsigned char* message, int sizeMessage){
     }
     else
       return FALSE;
-
-
 }
 
 //manda uma trama de controlo
@@ -434,60 +399,32 @@ unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * siz
 int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd){
   int s = 1;
   int e=1;
-  if(sizeStart != sizeEnd){
-
+  if(sizeStart != sizeEnd)
     return FALSE;
-  }
-
   else{
     if(end[0] == C2End){
       for(;s < sizeStart; s++,e++){
-        if(start[s] != end[e]){
-
+        if(start[s] != end[e])
           return FALSE;
-        }
       }
       return TRUE;
     }
     else{
-
       return FALSE;
     }
   }
 }
 
 off_t sizeOfFileFromStart(unsigned char * start){
-  return (start[3]<<24) | (start[4] << 16)  | (start[5] << 8)  | (start[6]);
-}
-
-unsigned char* nameOfFileFromStart(unsigned char * start){
-
-
-  int L2 = (int)start[8];
-
-  unsigned char * name = (unsigned char*)malloc(L2+1);
-
-  int i;
-  for (i=0; i < L2; i++){
-    name[i]=start[9+i];
-  }
-
-  name[L2]='\0';
-
-
-
-
-  return name;
+  return (start[3] << 24 ) | (start[4]<<16) | (start[5]<<8) | (start[6]);
 }
 
 
-void createFile(unsigned char * mensagem, int sizeFile,unsigned char *filename){
-  int i;
-  //char pasta[256];
-  //getcwd(pasta, 256);
-	FILE * file = fopen((char*) filename, "wb");
-	size_t bytes_written_to_file = fwrite(mensagem, 1, (size_t)sizeFile, file);
-
-  printf("New file created\n");
-
+void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char * filename){
+	FILE* file = fopen("pinguim.gif", "wb+");
+	printf("depois do fopen\n");
+	size_t bytes_written_to_file = fwrite((void *)mensagem, 1, *sizeFile, file);
+	printf("%zd\n",*sizeFile);
+	printf("New file created\n");
+	fclose(file);
 }
