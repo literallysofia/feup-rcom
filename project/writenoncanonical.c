@@ -47,6 +47,7 @@ int flagAlarm = FALSE;
 int trama = 0;
 int paragem = FALSE;
 unsigned char numMensagens=0;
+int numTotalTramas=0;
 
 volatile int STOP=FALSE;
 
@@ -70,7 +71,7 @@ unsigned char* headerAL(unsigned char* mensagem, off_t sizeFile, int * sizePacke
 
 unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile);
 
-void sendFinalMessage(int fd);
+void LLCLOSE(int fd);
 
 //handler do sinal de alarme
 void alarmHandler(){
@@ -79,14 +80,11 @@ void alarmHandler(){
   sumAlarms++;
 }
 
-int main(int argc, unsigned char** argv){
-  int fd, c, res;
+int main(int argc,char** argv){
+  int fd;
   struct termios oldtio,newtio;
-  char buf[255];
-  int i, sum = 0, speed = 0;
-  FILE* f; //File* para o ficheiro a usar
   off_t sizeFile; //tamanho do ficheiro em bytes
-  size_t indice=0;
+  off_t indice=0;
   int sizeControlPackageI=0;
 
 
@@ -136,34 +134,27 @@ int main(int argc, unsigned char** argv){
   // instalar handler do alarme
   (void)signal(SIGALRM,alarmHandler);
 
-
-//
- unsigned char * mensagem = openReadFile(argv[2], &sizeFile);
+ unsigned char * mensagem = openReadFile((unsigned char*)argv[2], &sizeFile);
 
   //se nao conseguirmos efetuar a ligaçao atraves do set e do ua o programa termina
   if(!LLOPEN(fd,0)){
     return -1;
   }
 
-
-
   int sizeOfFileName = strlen(argv[2]);
-    unsigned char * fileName = (unsigned char*) malloc(sizeOfFileName);
-     fileName = (unsigned char*)argv[2];
-    i = 0;
-
+  unsigned char * fileName = (unsigned char*) malloc(sizeOfFileName);
+  fileName = (unsigned char*)argv[2];
   unsigned char * start = controlPackageI(C2Start, sizeFile, fileName, sizeOfFileName, &sizeControlPackageI);
 
   LLWRITE(fd,start,sizeControlPackageI);
-  printf("MANDEI START\n");
+  printf("Mandou trama START\n");
 
   int sizePacket = sizePacketConst;
 
   while(sizePacket == sizePacketConst && indice < sizeFile){
     //split mensagem
     unsigned char* packet=splitMensagem(mensagem,&indice,&sizePacket,sizeFile);
-    int k=0;
-    printf("PACKET ENVIADO\n");
+    printf("Mandou packet numero %d\n", numTotalTramas);
     //header nivel aplicação
     int headerSize = sizePacket;
     unsigned char* mensagemHeader = headerAL(packet,sizeFile,&headerSize);
@@ -176,9 +167,9 @@ int main(int argc, unsigned char** argv){
 
   unsigned char * end = controlPackageI(C2End, sizeFile, fileName, sizeOfFileName, &sizeControlPackageI);
   LLWRITE(fd,end,sizeControlPackageI);
-  printf("MANDEI END\n");
+  printf("Mandou trama END\n");
 
-  sendFinalMessage(fd);
+  LLCLOSE(fd);
   sleep(1);
 
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
@@ -186,11 +177,12 @@ int main(int argc, unsigned char** argv){
     exit(-1);
   }
 
-
   close(fd);
   return 0;
 }
 
+//cabecalho das tramas i
+//Application layer
 unsigned char* headerAL(unsigned char* mensagem,off_t sizeFile,int* sizePacket){
   unsigned char* mensagemFinal = (unsigned char*)malloc(sizeFile + 4);
   mensagemFinal[0] = headerC;
@@ -200,10 +192,12 @@ unsigned char* headerAL(unsigned char* mensagem,off_t sizeFile,int* sizePacket){
   memcpy(mensagemFinal+4,mensagem,*sizePacket);
   *sizePacket += 4;
   numMensagens++;
+  numTotalTramas++;
   return mensagemFinal;
 }
 
-
+//divide uma mensagem proveniente do ficheiro em packets
+//Application layer
 unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile){
   unsigned char* packet;
   int i =0;
@@ -219,6 +213,8 @@ unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePack
   return packet;
 }
 
+//vê se o UA foi recebido.
+//Data link layer
 void stateMachineUA(int* state, unsigned char* c){
 
   switch(*state){
@@ -272,6 +268,7 @@ void stateMachineUA(int* state, unsigned char* c){
 }
 
 //manda a trama SET através da porta série para o recetor, para "avisar" que vai começar a mandar dados
+//Data link layer
 int LLOPEN(int fd, int x){
 
 	unsigned char c;
@@ -298,9 +295,9 @@ int LLOPEN(int fd, int x){
   }
 }
 
-//faz stuffing de uma mensagem e, de seguida, manda-a através da porta série
+//faz stuffing de uma mensagem e, de seguida, manda-a através da porta série.
+//data link layer
 int LLWRITE(int fd, unsigned char* mensagem, int size){
-
   unsigned char BCC2;
   unsigned char* BCC2Stuffed = (unsigned char*)malloc(sizeof(unsigned char));
   unsigned char* mensagemFinal = (unsigned char*)malloc((size+6)*sizeof(unsigned char));
@@ -353,33 +350,27 @@ int LLWRITE(int fd, unsigned char* mensagem, int size){
   mensagemFinal[j+1]=FLAG;
 
   //mandar mensagem
-  int res;
-
-  printf("size mensagem enviada %d",sizeMensagemFinal);
-
   do{
 
-    res = write(fd,mensagemFinal,sizeMensagemFinal);
-    if(res!=0) printf("Enviou Mensagem\n");
+    write(fd,mensagemFinal,sizeMensagemFinal);
+    flagAlarm=FALSE;
     alarm(3);
-  flagAlarm=FALSE;
-  unsigned char C = readControlMessage(fd);
-  if((C==CRR1 && trama == 0) || (C==CRR0 && trama == 1) ){
-    printf("recebeu rr\n");
-    rejeitado=FALSE;
-    sumAlarms=0;
-    trama ^= 1;
-    alarm(0);
-  }
-  else {
-    if(C== CREJ1 || C==CREJ0){
-      rejeitado = TRUE;
-      printf("recebeu rej\n");
+    unsigned char C = readControlMessage(fd);
+    if((C==CRR1 && trama == 0) || (C==CRR0 && trama == 1) ){
+      printf("Recebeu rr %x, trama = %d\n", C, trama);
+      rejeitado=FALSE;
+      sumAlarms=0;
+      trama ^= 1;
       alarm(0);
     }
-  }
-
-} while((flagAlarm && sumAlarms < NUMMAX) || rejeitado);
+    else {
+      if(C== CREJ1 || C==CREJ0){
+        rejeitado = TRUE;
+        printf("Recebeu rej %x, trama=%d\n",C,trama);
+        alarm(0);
+      }
+    }
+  } while((flagAlarm && sumAlarms < NUMMAX) || rejeitado);
   if(sumAlarms >= NUMMAX)
     return FALSE;
     else
@@ -387,6 +378,7 @@ int LLWRITE(int fd, unsigned char* mensagem, int size){
 }
 
 //manda uma qualquer trama de controlo
+//Application layer
 void sendControlMessage(int fd, unsigned char C){
   unsigned char message[5];
   message[0]=FLAG;
@@ -398,8 +390,8 @@ void sendControlMessage(int fd, unsigned char C){
 }
 
 //lê uma qualquer trama de controlo
+//Data link layer
 unsigned char readControlMessage(int fd){
-  printf("control message\n");
   int state=0;
   unsigned char c;
   unsigned char C;
@@ -409,13 +401,11 @@ unsigned char readControlMessage(int fd){
     switch(state){
       //recebe FLAG
       case 0:
-      //printf("state 0\n");
       if(c==FLAG)
         state=1;
         break;
       //recebe A
       case 1:
-      //printf("state 1\n");
       if(c==A)
         state=2;
       else{
@@ -427,14 +417,11 @@ unsigned char readControlMessage(int fd){
       break;
       //recebe c
       case 2:
-        //printf("state 2\n");
         if(c==CRR0 || c==CRR1 || c==CREJ0 ||  c==CREJ1 || c==DISC){
           C=c;
           state=3;
         }
-
         else{
-
           if(c==FLAG)
             state=1;
           else
@@ -443,7 +430,6 @@ unsigned char readControlMessage(int fd){
         break;
       //recebe BCC
       case 3:
-      //printf("state 3\n");
       if(c==(A^C))
         state=4;
       else
@@ -451,14 +437,12 @@ unsigned char readControlMessage(int fd){
       break;
       //recebe FLAG final
       case 4:
-        //printf("state 4\n");
         if(c==FLAG)
-          //printf("recebeu mensagem controlo\n");
           {
             alarm(0);
             state=5;
             return C;
-        }
+          }
         else
           state=0;
       break;
@@ -467,8 +451,8 @@ unsigned char readControlMessage(int fd){
   return 0xFF;
 }
 
-
 //calculo do BCC2 de uma mensagem
+//Data link layer
 unsigned char calculoBCC2(unsigned char* mensagem, int size){
   unsigned char BCC2 = mensagem[0];
   int i;
@@ -479,6 +463,7 @@ unsigned char calculoBCC2(unsigned char* mensagem, int size){
 }
 
 //stuffing do BCC2
+//Data link layer
 unsigned char* stuffingBCC2(unsigned char BCC2, int* sizeBCC2){
   unsigned char* BCC2Stuffed;
   if(BCC2 == FLAG){
@@ -499,19 +484,19 @@ unsigned char* stuffingBCC2(unsigned char BCC2, int* sizeBCC2){
   return BCC2Stuffed;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////
+//abre o ficheiro
 unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile){
   FILE* f;
   struct stat metadata;
   unsigned char* fileData;
 
-  if((f = fopen(fileName, "rb"))== NULL){
+  if((f = fopen((char*)fileName, "rb"))== NULL){
     perror("error opening file!");
     exit(-1);
   }
-  stat(fileName,&metadata);
+  stat((char*)fileName,&metadata);
   (*sizeFile) = metadata.st_size;
-  printf("This file has %d bytes \n",*sizeFile);
+  printf("This file has %ld bytes \n",*sizeFile);
 
   fileData = (unsigned char*)malloc(*sizeFile);
 
@@ -519,6 +504,8 @@ unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile){
   return fileData;
 }
 
+//manda a trama start e a end
+//Application layer
 unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned char* fileName, int sizeOfFileName, int* sizeControlPackageI){
     *sizeControlPackageI = 9*sizeof(unsigned char)+sizeOfFileName;
   unsigned char* package = (unsigned char*)malloc(*sizeControlPackageI);
@@ -535,25 +522,25 @@ unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned cha
   package[6]= sizeFile & 0xFF;
   package[7]=T2;
   package[8]=sizeOfFileName;
+  int k =0;
+  for(; k < sizeOfFileName;k++){
+    package[9+k]=fileName[k];
+  }
   return package;
 }
 
-void sendFinalMessage(int fd){
-
+//manda disconnect
+//Data link layer
+void LLCLOSE(int fd){
   sendControlMessage(fd,DISC);
-  printf("mandou DISC\n");
+  printf("Mandou DISC\n");
   unsigned char C;
   //espera ler o DISC
   C = readControlMessage(fd);
-  printf("valor do c %x\n",C );
-
   while(C!=DISC){
     C = readControlMessage(fd);
-    printf("valor do c %x\n",C );
   }
-
-  printf("leu disc\n");
-
+  printf("Leu disc\n");
   sendControlMessage(fd,UA_C);
-  printf("mandou ua\n");
+  printf("Mandou ua final\n");
 }
