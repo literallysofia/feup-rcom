@@ -37,29 +37,20 @@ volatile int STOP=FALSE;
 int esperado = 0;
 
 void LLOPEN(int fd);
-
 unsigned char * LLREAD(int fd, int* sizeMessage);
-
 int checkBCC2(unsigned char* message, int sizeMessage);
-
 int readControlMessage(int fd, unsigned char C);
-
 void sendControlMessage(int fd, unsigned char C);
-
 unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * sizeRemoved);
-
 off_t sizeOfFileFromStart(unsigned char * start);
-
+unsigned char* nameOfFileFromStart(unsigned char * start);
 int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd);
-
 void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char * filename);
-
-void sendFinalMessage (int fd);
+void LLCLOSE (int fd);
 
 int main(int argc, char** argv){
-    int fd,c, res;
+    int fd;
     struct termios oldtio,newtio;
-    char buf[255];
     int sizeMessage=0;
     unsigned char* mensagemPronta;
     int sizeOfStart = 0;
@@ -68,7 +59,7 @@ int main(int argc, char** argv){
     unsigned char * giant;
     off_t index = 0;
 
-    if ( (argc < 3) ||
+    if ( (argc < 2) ||
   	     ((strcmp("/dev/ttyS0", argv[1])!=0) &&
   	      (strcmp("/dev/ttyS1", argv[1])!=0) )) {
       printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
@@ -114,19 +105,19 @@ int main(int argc, char** argv){
     LLOPEN(fd);
     start = LLREAD(fd,&sizeOfStart);
 
+		unsigned char* nameOfFile=nameOfFileFromStart(start);
     sizeOfGiant = sizeOfFileFromStart(start);
+
     giant = (unsigned char*)malloc(sizeOfGiant);
-	printf("yayy\n");
 
     while(TRUE){
       mensagemPronta = LLREAD(fd, &sizeMessage);
 			if(sizeMessage == 0)
 			continue;
-			printf("size message no main %d\n",sizeMessage);
       if(isEndMessage(start,sizeOfStart,mensagemPronta,sizeMessage)){
 					printf("End message received\n");
-	 	break;
-	}
+	 		break;
+			}
 
       int sizeWithoutHeader = 0;
 
@@ -135,28 +126,25 @@ int main(int argc, char** argv){
       memcpy(giant+index,mensagemPronta,sizeWithoutHeader);
       index += sizeWithoutHeader;
     }
-    //meter o array gigante no file
-	printf("antes do printf\n");
+
+		printf("Mensagem: \n");
   	int i = 0;
-	for(; i < sizeOfGiant;i++){
+		for(; i < sizeOfGiant;i++){
 		printf("%x",giant[i]);
 	}
 
-	printf("\n");
-	printf("mandar create file\n" );
-	createFile(giant,&sizeOfGiant,(unsigned char*)argv[2]);
-	printf("depois do create file\n");
+	createFile(giant,&sizeOfGiant,nameOfFile);
 
-	sendFinalMessage(fd);
+	LLCLOSE(fd);
 
-		//printf("%s\n", argv[3]);
     sleep(1);
     tcsetattr(fd,TCSANOW,&oldtio);
     close(fd);
     return 0;
 }
 
-void sendFinalMessage (int fd){
+//Data linhk layer
+void LLCLOSE (int fd){
 	readControlMessage(fd, DISC_C);
 	printf("Recebeu DISC\n");
 	sendControlMessage(fd, DISC_C);
@@ -166,17 +154,19 @@ void sendFinalMessage (int fd){
 }
 
 //lê trama de controlo SET e manda trama UA
+//Data link layer
 void LLOPEN(int fd){
   if(readControlMessage(fd,SET_C))
   {
-      printf("recebeu set\n");
+      printf("Recebeu SET\n");
       sendControlMessage(fd,UA_C);
-      printf("mandou ua\n");
+      printf("Mandou UA\n");
   }
   //TESTAR EM CASO DE ERRO
  }
 
 //lê uma mensagem, faz destuffing
+//Data link layer
 unsigned char* LLREAD(int fd, int* sizeMessage){
   unsigned char* message = (unsigned char *)malloc(0);
 
@@ -186,7 +176,6 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
   int mandarDados=FALSE;
     unsigned char c;
     int state=0;
-    printf("comecando o read\n");
     while(state!=6){
 
       read(fd,&c,1);
@@ -296,11 +285,11 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
       }
 
   }
-	printf("size message %d\n", *sizeMessage);
+	printf("Message size: %d\n", *sizeMessage);
     //message tem BCC2 no fim
     message = (unsigned char*)realloc(message,*sizeMessage-1);
-    int i=0;
-	*sizeMessage = *sizeMessage - 1;
+
+		*sizeMessage = *sizeMessage - 1;
     if(mandarDados){
       if(trama==esperado){
         esperado^=1;
@@ -313,7 +302,8 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
     return message;
 }
 
-  //vê se o BCC2 recebido está certo
+//vê se o BCC2 recebido está certo
+//Data link layer
 int checkBCC2(unsigned char* message, int sizeMessage){
     int i =1;
     unsigned char BCC2=message[0];
@@ -328,6 +318,7 @@ int checkBCC2(unsigned char* message, int sizeMessage){
 }
 
 //manda uma trama de controlo
+//Application Layer
 void sendControlMessage(int fd,unsigned char C){
     unsigned char message[5];
     message[0]=FLAG;
@@ -339,6 +330,7 @@ void sendControlMessage(int fd,unsigned char C){
 }
 
 //lê uma trama de controlo
+//Application Layer
 int readControlMessage(int fd, unsigned char C){
     int state=0;
     unsigned char c;
@@ -395,6 +387,8 @@ int readControlMessage(int fd, unsigned char C){
       return TRUE;
 }
 
+//cabeçalho das tramas I
+//Application Layer
 unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * sizeRemoved){
   int i = 0;
   int j = 4;
@@ -406,7 +400,7 @@ unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * siz
   return messageRemovedHeader;
 }
 
-
+//Application Layer
 int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd){
   int s = 1;
   int e=1;
@@ -426,16 +420,33 @@ int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int si
   }
 }
 
+//Application Layer
 off_t sizeOfFileFromStart(unsigned char * start){
   return (start[3] << 24 ) | (start[4]<<16) | (start[5]<<8) | (start[6]);
 }
 
+//Application Layer
+unsigned char* nameOfFileFromStart(unsigned char * start){
 
+  int L2 = (int)start[8];
+
+  unsigned char * name = (unsigned char*)malloc(L2+1);
+
+  int i;
+  for (i=0; i < L2; i++){
+    name[i]=start[9+i];
+  }
+
+  name[L2]='\0';
+
+  return name;
+}
+
+//cria ficheiro
 void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char filename[]){
-	FILE* file = fopen(filename, "wb+");
+	FILE* file = fopen((char*)filename, "wb+");
 
-	printf("depois do fopen\n");
-	size_t bytes_written_to_file = fwrite((void *)mensagem, 1, *sizeFile, file);
+	fwrite((void *)mensagem, 1, *sizeFile, file);
 	printf("%zd\n",*sizeFile);
 	printf("New file created\n");
 	fclose(file);
