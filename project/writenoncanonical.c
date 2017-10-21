@@ -40,7 +40,7 @@
 #define L2 0x0B
 #define DISC 0x0B
 #define headerC 0x01
-#define sizePacketConst 1000
+#define sizePacketConst 7
 
 int sumAlarms=0;
 int flagAlarm = FALSE;
@@ -68,7 +68,7 @@ unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile);
 
 unsigned char* headerAL(unsigned char* mensagem, off_t sizeFile, int * sizePacket);
 
-unsigned char* splitMensagem(unsigned char* mensagem,size_t* indice,int* sizePacket, off_t sizeFile);
+unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile);
 
 //handler do sinal de alarme
 void alarmHandler(){
@@ -133,26 +133,24 @@ int main(int argc, unsigned char** argv){
   // instalar handler do alarme
   (void)signal(SIGALRM,alarmHandler);
 
-  //mensagem a enviar
-  //unsigned char mensagem[8] = {FLAG,Escape,0x32,0x51,0x0b,FLAG,FLAG,FLAG};
-//  unsigned char mensagem[] = "Hello World";
-  //sizeFile = 8;
 
-  unsigned char* mensagem = openReadFile(argv[2], &sizeFile);
+//
+ unsigned char * mensagem = openReadFile(argv[2], &sizeFile);
 
   //se nao conseguirmos efetuar a ligaçao atraves do set e do ua o programa termina
   if(!LLOPEN(fd,0)){
     return -1;
   }
+  
+  
 
   int sizeOfFileName = strlen(argv[2]);
     unsigned char * fileName = (unsigned char*) malloc(sizeOfFileName);
      fileName = (unsigned char*)argv[2];
     i = 0;
-
-
+	
   unsigned char * start = controlPackageI(C2Start, sizeFile, fileName, sizeOfFileName, &sizeControlPackageI);
-
+  
   LLWRITE(fd,start,sizeControlPackageI);
   printf("MANDEI START\n");
 
@@ -171,11 +169,6 @@ int main(int argc, unsigned char** argv){
   }
 
   unsigned char * end = controlPackageI(C2End, sizeFile, fileName, sizeOfFileName, &sizeControlPackageI);
-  printf("nome do ficheiro end\n");
-  int k = 0;
-  for(; k < sizeOfFileName;k++){
-    printf("%c",end[9+k]);
-  }
   LLWRITE(fd,end,sizeControlPackageI);
   printf("MANDEI END\n");
 
@@ -203,23 +196,18 @@ unsigned char* headerAL(unsigned char* mensagem,off_t sizeFile,int* sizePacket){
 }
 
 
-unsigned char* splitMensagem(unsigned char* mensagem,size_t* indice,int* sizePacket, off_t sizeFile){
-
+unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile){
   unsigned char* packet;
   int i =0;
-  size_t j = *indice;
-
-  printf("size file %d\n",sizeFile);
+  off_t j = *indice;
   if(*indice+*sizePacket > sizeFile){
     *sizePacket = sizeFile - *indice;
   }
   packet = (unsigned char*)malloc(*sizePacket);
-  printf("size do packet %d\n",*sizePacket);
   for(; i < *sizePacket;i++,j++){
     packet[i]=mensagem[j];
   }
   *indice = j;
-
   return packet;
 }
 
@@ -355,15 +343,19 @@ void LLWRITE(int fd, unsigned char* mensagem, int size){
   }
   mensagemFinal[j+1]=FLAG;
 
+  //printf("mensagem final\n");
+  /*i =0;
+  for(; i < sizeMensagemFinal;i++){
+    printf("%x\n",mensagemFinal[i] );
+  }*/
+
   //mandar mensagem
   int res;
+  
+  printf("size mensagem enviada %d",sizeMensagemFinal);
+
   do{
-    int i = 0;
-    for (; i < sizeMensagemFinal; i++) {
-      printf("%x", mensagemFinal[i]);
-      printf("|");
-    }
-    printf("\n");
+
     res = write(fd,mensagemFinal,sizeMensagemFinal);
     if(res!=0) printf("Enviou Mensagem\n");
     alarm(3);
@@ -378,7 +370,7 @@ void LLWRITE(int fd, unsigned char* mensagem, int size){
       printf("recebeu rej1\n");
     }
 
-    }
+  }
 	} while(flagAlarm && sumAlarms < NUMMAX);
 }
 
@@ -395,7 +387,7 @@ void sendControlMessage(int fd, unsigned char C){
 
 //lê uma qualquer trama de controlo
 unsigned char readControlMessage(int fd){
-  printf("comecou a ler control message\n");
+  printf("control message\n");
   int state=0;
   unsigned char c;
   unsigned char C;
@@ -454,7 +446,6 @@ unsigned char readControlMessage(int fd){
           {
             alarm(0);
             state=5;
-            printf("leu control message\n");
             return C;
         }
 
@@ -463,7 +454,6 @@ unsigned char readControlMessage(int fd){
       break;
     }
   }
-
 }
 
 
@@ -519,9 +509,9 @@ unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile){
 }
 
 unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned char* fileName, int sizeOfFileName, int* sizeControlPackageI){
-
     *sizeControlPackageI = 9*sizeof(unsigned char)+sizeOfFileName;
   unsigned char* package = (unsigned char*)malloc(*sizeControlPackageI);
+ 
   if(state==C2Start)
     package[0]=C2Start;
   else
@@ -529,20 +519,13 @@ unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned cha
   package[1]=T1;
   package[2]=L1;
   package[3]= (sizeFile >> 24) & 0xFF;
-  package[4]=(sizeFile >> 16) & 0xFF;
-  package[5]=(sizeFile >> 8) & 0xFF;
-  package[6]=sizeFile & 0xFF;
+package[4]= (sizeFile >> 16) & 0xFF;
+package[5]= (sizeFile >> 8) & 0xFF;
+package[6]= sizeFile & 0xFF;
   package[7]=T2;
   package[8]=sizeOfFileName;
-  int i=0;
+  int i;
   int j = 9;
-  for(; i < sizeOfFileName;i++,j++){
-    package[j]=fileName[i];
-  }
-  printf("SIZE OF FILE \n" );
-  printf("%x\n",package[3]);
-  printf("%x\n",package[4]);
-  printf("%x\n",package[5]);
-  printf("%x\n",package[6]);
+  
   return package;
 }
