@@ -1,46 +1,5 @@
 /*Non-Canonical Input Processing*/
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <signal.h>
-#include <unistd.h>
-
-#define BAUDRATE B38400
-#define MODEMDEVICE "/dev/ttyS1"
-#define _POSIX_SOURCE 1 /* POSIX compliant source */
-#define FALSE 0
-#define TRUE 1
-
-#define FLAG 0x7E
-#define A 0x03
-#define SET_C 0x03
-#define UA_C 0x07
-#define UA_BCC (A^UA_C)
-#define SET_BCC (A^SET_C)
-#define NUMMAX 3
-#define C10 0x00
-#define C11 0x40
-#define Escape 0x7D
-#define escapeFlag 0x5E
-#define escapeEscape 0x5D
-#define C2Start 0x02
-#define C2End 0x03
-#define CRR0 0x05
-#define CRR1 0x85
-#define CREJ0 0x01
-#define CREJ1 0x81
-#define T1 0x00
-#define T2 0x01
-#define L1 0x04
-#define L2 0x0B
-#define DISC 0x0B
-#define headerC 0x01
-#define sizePacketConst 7
+#include "writenoncanonical.h"
 
 int sumAlarms=0;
 int flagAlarm = FALSE;
@@ -48,30 +7,6 @@ int trama = 0;
 int paragem = FALSE;
 unsigned char numMensagens=0;
 int numTotalTramas=0;
-
-volatile int STOP=FALSE;
-
-int LLOPEN(int fd, int x);
-
-int LLWRITE(int fd, unsigned char* mensagem, int size);
-
-unsigned char calculoBCC2(unsigned char* mensagem, int size);
-
-void sendControlMessage(int fd, unsigned char C);
-
-unsigned char* stuffingBCC2(unsigned char BCC2,int* sizeBCC2);
-
-unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned char* fileName, int sizeOfFilename, int* sizeControlPackageI);
-
-unsigned char readControlMessage(int fd);
-
-unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile);
-
-unsigned char* headerAL(unsigned char* mensagem, off_t sizeFile, int * sizePacket);
-
-unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile);
-
-void LLCLOSE(int fd);
 
 //handler do sinal de alarme
 void alarmHandler(){
@@ -153,7 +88,7 @@ int main(int argc,char** argv){
 
   while(sizePacket == sizePacketConst && indice < sizeFile){
     //split mensagem
-    unsigned char* packet=splitMensagem(mensagem,&indice,&sizePacket,sizeFile);
+    unsigned char* packet=splitMessage(mensagem,&indice,&sizePacket,sizeFile);
     printf("Mandou packet numero %d\n", numTotalTramas);
     //header nivel aplicação
     int headerSize = sizePacket;
@@ -170,8 +105,8 @@ int main(int argc,char** argv){
   printf("Mandou trama END\n");
 
   LLCLOSE(fd);
-  sleep(1);
 
+  sleep(1);
   if ( tcsetattr(fd,TCSANOW,&oldtio) == -1) {
     perror("tcsetattr");
     exit(-1);
@@ -181,8 +116,7 @@ int main(int argc,char** argv){
   return 0;
 }
 
-//cabecalho das tramas i
-//Application layer
+
 unsigned char* headerAL(unsigned char* mensagem,off_t sizeFile,int* sizePacket){
   unsigned char* mensagemFinal = (unsigned char*)malloc(sizeFile + 4);
   mensagemFinal[0] = headerC;
@@ -196,9 +130,8 @@ unsigned char* headerAL(unsigned char* mensagem,off_t sizeFile,int* sizePacket){
   return mensagemFinal;
 }
 
-//divide uma mensagem proveniente do ficheiro em packets
-//Application layer
-unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile){
+
+unsigned char* splitMessage(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile){
   unsigned char* packet;
   int i =0;
   off_t j = *indice;
@@ -213,8 +146,7 @@ unsigned char* splitMensagem(unsigned char* mensagem,off_t* indice,int* sizePack
   return packet;
 }
 
-//vê se o UA foi recebido.
-//Data link layer
+
 void stateMachineUA(int* state, unsigned char* c){
 
   switch(*state){
@@ -267,8 +199,7 @@ void stateMachineUA(int* state, unsigned char* c){
 
 }
 
-//manda a trama SET através da porta série para o recetor, para "avisar" que vai começar a mandar dados
-//Data link layer
+
 int LLOPEN(int fd, int x){
 
 	unsigned char c;
@@ -295,8 +226,7 @@ int LLOPEN(int fd, int x){
   }
 }
 
-//faz stuffing de uma mensagem e, de seguida, manda-a através da porta série.
-//data link layer
+
 int LLWRITE(int fd, unsigned char* mensagem, int size){
   unsigned char BCC2;
   unsigned char* BCC2Stuffed = (unsigned char*)malloc(sizeof(unsigned char));
@@ -377,8 +307,7 @@ int LLWRITE(int fd, unsigned char* mensagem, int size){
     return TRUE;
 }
 
-//manda uma qualquer trama de controlo
-//Application layer
+
 void sendControlMessage(int fd, unsigned char C){
   unsigned char message[5];
   message[0]=FLAG;
@@ -389,8 +318,7 @@ void sendControlMessage(int fd, unsigned char C){
   write(fd,message,5);
 }
 
-//lê uma qualquer trama de controlo
-//Data link layer
+
 unsigned char readControlMessage(int fd){
   int state=0;
   unsigned char c;
@@ -451,8 +379,7 @@ unsigned char readControlMessage(int fd){
   return 0xFF;
 }
 
-//calculo do BCC2 de uma mensagem
-//Data link layer
+
 unsigned char calculoBCC2(unsigned char* mensagem, int size){
   unsigned char BCC2 = mensagem[0];
   int i;
@@ -462,8 +389,7 @@ unsigned char calculoBCC2(unsigned char* mensagem, int size){
   return BCC2;
 }
 
-//stuffing do BCC2
-//Data link layer
+
 unsigned char* stuffingBCC2(unsigned char BCC2, int* sizeBCC2){
   unsigned char* BCC2Stuffed;
   if(BCC2 == FLAG){
@@ -484,7 +410,7 @@ unsigned char* stuffingBCC2(unsigned char BCC2, int* sizeBCC2){
   return BCC2Stuffed;
 }
 
-//abre o ficheiro
+
 unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile){
   FILE* f;
   struct stat metadata;
@@ -504,8 +430,7 @@ unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile){
   return fileData;
 }
 
-//manda a trama start e a end
-//Application layer
+
 unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned char* fileName, int sizeOfFileName, int* sizeControlPackageI){
     *sizeControlPackageI = 9*sizeof(unsigned char)+sizeOfFileName;
   unsigned char* package = (unsigned char*)malloc(*sizeControlPackageI);
@@ -529,8 +454,7 @@ unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned cha
   return package;
 }
 
-//manda disconnect
-//Data link layer
+
 void LLCLOSE(int fd){
   sendControlMessage(fd,DISC);
   printf("Mandou DISC\n");
@@ -543,4 +467,5 @@ void LLCLOSE(int fd){
   printf("Leu disc\n");
   sendControlMessage(fd,UA_C);
   printf("Mandou ua final\n");
+  printf("Writer terminated \n");
 }

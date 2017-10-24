@@ -1,52 +1,6 @@
 /*Non-Canonical Input Processing*/
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <signal.h>
-#include <unistd.h>
-
-#define BAUDRATE B38400
-#define _POSIX_SOURCE 1 /* POSIX compliant source */
-#define FALSE 0
-#define TRUE 1
-
-#define FLAG 0x7E
-#define A 0x03
-#define SET_C 0x03
-#define SET_BCC A^SET_C
-#define UA_C 0x07
-#define UA_BCC A^UA_C
-#define C10 0x00
-#define C11 0x40
-#define Escape 0x7D
-#define escapeFlag 0x5E
-#define escapeEscape 0x5D
-#define RR_C0 0x05
-#define RR_C1 0x85
-#define REJ_C0 0x01
-#define REJ_C1 0x81
-#define DISC_C 0x0B
-#define C2End 0x03
-
-volatile int STOP=FALSE;
+#include "nc.h"
 int esperado = 0;
-
-void LLOPEN(int fd);
-unsigned char * LLREAD(int fd, int* sizeMessage);
-int checkBCC2(unsigned char* message, int sizeMessage);
-int readControlMessage(int fd, unsigned char C);
-void sendControlMessage(int fd, unsigned char C);
-unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * sizeRemoved);
-off_t sizeOfFileFromStart(unsigned char * start);
-unsigned char* nameOfFileFromStart(unsigned char * start);
-int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd);
-void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char * filename);
-void LLCLOSE (int fd);
 
 int main(int argc, char** argv){
     int fd;
@@ -137,13 +91,12 @@ int main(int argc, char** argv){
 
 	LLCLOSE(fd);
 
-    sleep(1);
-    tcsetattr(fd,TCSANOW,&oldtio);
-    close(fd);
-    return 0;
+  sleep(1);
+  tcsetattr(fd,TCSANOW,&oldtio);
+  close(fd);
+  return 0;
 }
 
-//Data linhk layer
 void LLCLOSE (int fd){
 	readControlMessage(fd, DISC_C);
 	printf("Recebeu DISC\n");
@@ -151,10 +104,9 @@ void LLCLOSE (int fd){
 	printf("Mandou DISC\n");
 	readControlMessage(fd, UA_C);
 	printf("Recebeu UA\n");
+	printf("Receiver terminated\n");
 }
 
-//lê trama de controlo SET e manda trama UA
-//Data link layer
 void LLOPEN(int fd){
   if(readControlMessage(fd,SET_C))
   {
@@ -162,22 +114,18 @@ void LLOPEN(int fd){
       sendControlMessage(fd,UA_C);
       printf("Mandou UA\n");
   }
-  //TESTAR EM CASO DE ERRO
  }
 
-//lê uma mensagem, faz destuffing
-//Data link layer
 unsigned char* LLREAD(int fd, int* sizeMessage){
   unsigned char* message = (unsigned char *)malloc(0);
-
 	*sizeMessage = 0;
   unsigned char c_read;
   int trama=0;
   int mandarDados=FALSE;
-    unsigned char c;
-    int state=0;
-    while(state!=6){
+  unsigned char c;
+  int state=0;
 
+  while(state!=6){
       read(fd,&c,1);
 	     //printf("%x\n",c);
       switch(state){
@@ -241,7 +189,6 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
                      mandarDados=TRUE;
 				             printf("Enviou RR, T: %d\n", trama);
 			         }
-
              else
               {
                 if(trama == 0)
@@ -302,8 +249,6 @@ unsigned char* LLREAD(int fd, int* sizeMessage){
     return message;
 }
 
-//vê se o BCC2 recebido está certo
-//Data link layer
 int checkBCC2(unsigned char* message, int sizeMessage){
     int i =1;
     unsigned char BCC2=message[0];
@@ -317,8 +262,6 @@ int checkBCC2(unsigned char* message, int sizeMessage){
       return FALSE;
 }
 
-//manda uma trama de controlo
-//Application Layer
 void sendControlMessage(int fd,unsigned char C){
     unsigned char message[5];
     message[0]=FLAG;
@@ -329,8 +272,6 @@ void sendControlMessage(int fd,unsigned char C){
     write(fd,message,5);
 }
 
-//lê uma trama de controlo
-//Application Layer
 int readControlMessage(int fd, unsigned char C){
     int state=0;
     unsigned char c;
@@ -387,8 +328,6 @@ int readControlMessage(int fd, unsigned char C){
       return TRUE;
 }
 
-//cabeçalho das tramas I
-//Application Layer
 unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * sizeRemoved){
   int i = 0;
   int j = 4;
@@ -400,7 +339,6 @@ unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * siz
   return messageRemovedHeader;
 }
 
-//Application Layer
 int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd){
   int s = 1;
   int e=1;
@@ -420,16 +358,13 @@ int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int si
   }
 }
 
-//Application Layer
 off_t sizeOfFileFromStart(unsigned char * start){
   return (start[3] << 24 ) | (start[4]<<16) | (start[5]<<8) | (start[6]);
 }
 
-//Application Layer
 unsigned char* nameOfFileFromStart(unsigned char * start){
 
   int L2 = (int)start[8];
-
   unsigned char * name = (unsigned char*)malloc(L2+1);
 
   int i;
@@ -438,14 +373,11 @@ unsigned char* nameOfFileFromStart(unsigned char * start){
   }
 
   name[L2]='\0';
-
   return name;
 }
 
-//cria ficheiro
 void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char filename[]){
 	FILE* file = fopen((char*)filename, "wb+");
-
 	fwrite((void *)mensagem, 1, *sizeFile, file);
 	printf("%zd\n",*sizeFile);
 	printf("New file created\n");
