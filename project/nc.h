@@ -16,9 +16,9 @@
 #define FLAG 0x7E
 #define A 0x03
 #define SET_C 0x03
-#define SET_BCC A^SET_C
+#define SET_BCC A ^ SET_C
 #define UA_C 0x07
-#define UA_BCC A^UA_C
+#define UA_BCC A ^ UA_C
 #define C10 0x00
 #define C11 0x40
 #define Escape 0x7D
@@ -41,26 +41,26 @@ void LLOPEN(int fd);
 * Lê uma mensagem e faz destuffing
 * Data link layer
 */
-unsigned char * LLREAD(int fd, int* sizeMessage);
+unsigned char *LLREAD(int fd, int *sizeMessage);
 
 /*
 * Obtem o nome do ficheiro a ser passado
 * Application layer
 */
-unsigned char* nameOfFileFromStart(unsigned char * start);
+unsigned char *nameOfFileFromStart(unsigned char *start);
 
 /*
 * Obtem o tamanho do ficheiro
 * Application layer
 */
-off_t sizeOfFileFromStart(unsigned char * start);
+off_t sizeOfFileFromStart(unsigned char *start);
 
 /*
 * Verifica se o BCC2 recebido na mensagem esta certo, ou seja, se o xor de todos os bytes da mensagem
 * e igual ao BCC2 recebido
 * Data link layer
 */
-int checkBCC2(unsigned char* message, int sizeMessage);
+int checkBCC2(unsigned char *message, int sizeMessage);
 
 /*
 * Ciclo de leitura que fica a espera de ler uma trama de controlo em que C seja igual ao c recebido
@@ -74,27 +74,26 @@ int readControlMessage(int fd, unsigned char C);
 */
 void sendControlMessage(int fd, unsigned char C);
 
-
 /*
 * Remove o cabecalho colocado pela application layer nas tramas I
 * Application layer
 */
-unsigned char * removeHeader(unsigned char * toRemove,int sizeToRemove,int * sizeRemoved);
+unsigned char *removeHeader(unsigned char *toRemove, int sizeToRemove, int *sizeRemoved);
 
 /*
 * Verifica se a trama recebida e a trama END(igual a trama START mas com valor de C2 diferente)
 * Application layer
 */
-int isEndMessage(unsigned char * start,int sizeStart,unsigned char * end, int sizeEnd);
+int isEndMessage(unsigned char *start, int sizeStart, unsigned char *end, int sizeEnd);
 
 /*
 * Cria um ficheiro com os dados recebidos do ficheiro original e com o mesmo nome
 * Application layer
 */
-void createFile(unsigned char * mensagem, off_t* sizeFile,unsigned char * filename);
+void createFile(unsigned char *mensagem, off_t *sizeFile, unsigned char *filename);
 
 /*
 * Mecanismo de terminacao
 * Data link Layer
 */
-void LLCLOSE (int fd);
+void LLCLOSE(int fd);
