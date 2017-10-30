@@ -9,7 +9,6 @@
 #include <signal.h>
 #include <unistd.h>
 
-
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
 #define _POSIX_SOURCE 1 /* POSIX compliant source */
@@ -20,8 +19,8 @@
 #define A 0x03
 #define SET_C 0x03
 #define UA_C 0x07
-#define UA_BCC (A^UA_C)
-#define SET_BCC (A^SET_C)
+#define UA_BCC (A ^ UA_C)
+#define SET_BCC (A ^ SET_C)
 #define NUMMAX 3
 #define C10 0x00
 #define C11 0x40
@@ -54,13 +53,13 @@ int LLOPEN(int fd, int x);
 * Faz stuffing de uma mensagem e manda-a para o recetor
 * Data link layer
 */
-int LLWRITE(int fd, unsigned char* mensagem, int size);
+int LLWRITE(int fd, unsigned char *mensagem, int size);
 
 /*
 * Calcula o valor do BCC2 de uma mensagem
 * Data link Layer
 */
-unsigned char calculoBCC2(unsigned char* mensagem, int size);
+unsigned char calculoBCC2(unsigned char *mensagem, int size);
 
 /*
 * Manda uma qualquer trama de controlo, sendo o C recebido a diferenca
@@ -72,13 +71,13 @@ void sendControlMessage(int fd, unsigned char C);
 * Stuffing do BCC2
 * Data link layer
 */
-unsigned char* stuffingBCC2(unsigned char BCC2,int* sizeBCC2);
+unsigned char *stuffingBCC2(unsigned char BCC2, int *sizeBCC2);
 
 /*
 * Manda os pacotes de controlo I START e END
 * Application layer
 */
-unsigned char* controlPackageI(unsigned char state, off_t sizeFile, unsigned char* fileName, int sizeOfFilename, int* sizeControlPackageI);
+unsigned char *controlPackageI(unsigned char state, off_t sizeFile, unsigned char *fileName, int sizeOfFilename, int *sizeControlPackageI);
 
 /*
 * Le uma qualquer trama de controlo
@@ -90,25 +89,25 @@ unsigned char readControlMessage(int fd);
 * Abre um ficheiro e le o seu conteudo
 * Application layer
 */
-unsigned char* openReadFile(unsigned char* fileName, off_t* sizeFile);
+unsigned char *openReadFile(unsigned char *fileName, off_t *sizeFile);
 
 /*
 * Acrescenta cabecalho das tramas I
 * Application layer
 */
-unsigned char* headerAL(unsigned char* mensagem, off_t sizeFile, int * sizePacket);
+unsigned char *headerAL(unsigned char *mensagem, off_t sizeFile, int *sizePacket);
 
 /*
 * Divide uma mensagem proveniente do ficheiro em packets
 * Application layer
 */
-unsigned char* splitMessage(unsigned char* mensagem,off_t* indice,int* sizePacket, off_t sizeFile);
+unsigned char *splitMessage(unsigned char *mensagem, off_t *indice, int *sizePacket, off_t sizeFile);
 
 /*
 * Verifica se o UA foi recebido (com alarme)
 * Data link layer
 */
-void stateMachineUA(int* state, unsigned char* c);
+void stateMachineUA(int *state, unsigned char *c);
 
 /*
 * Mecanismo de terminacao
@@ -120,10 +119,10 @@ void LLCLOSE(int fd);
 * Geração aleatória de erros no BCC2
 * Data link layer
 */
-unsigned char * messUpBCC2(unsigned char* packet, int sizePacket);
+unsigned char *messUpBCC2(unsigned char *packet, int sizePacket);
 
 /*
 * Geração aleatória de erros no BCC1
 * Data link layer
 */
-unsigned char * messUpBCC1(unsigned char* packet, int sizePacket);
+unsigned char *messUpBCC1(unsigned char *packet, int sizePacket);
