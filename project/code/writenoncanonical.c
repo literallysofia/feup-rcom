@@ -326,7 +326,7 @@ int LLWRITE(int fd, unsigned char *mensagem, int size)
 
     unsigned char *copia;
     copia = messUpBCC1(mensagemFinal, sizeMensagemFinal); //altera bcc1
-    copia = messUpBCC2(mensagemFinal, sizeMensagemFinal); //altera bcc2
+    copia = messUpBCC2(copia, sizeMensagemFinal); //altera bcc2
     write(fd, copia, sizeMensagemFinal);
 
     flagAlarm = FALSE;

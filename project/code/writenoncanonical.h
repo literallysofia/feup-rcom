@@ -39,7 +39,7 @@
 #define L2 0x0B
 #define DISC 0x0B
 #define headerC 0x01
-#define sizePacketConst 40
+#define sizePacketConst 100
 #define bcc2ErrorPercentage 0
 #define bcc1ErrorPercentage 0
 
