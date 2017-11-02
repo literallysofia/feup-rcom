@@ -1,5 +1,5 @@
 /*Non-Canonical Input Processing*/
-#include "nc.h"
+#include "reader.h"
 int esperado = 0;
 
 int main(int argc, char **argv)
