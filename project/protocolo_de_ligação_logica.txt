@@ -1,21 +1,0 @@
-  (identificação dos principais aspetos funcionais; descrição da estratégia de implementação destes aspetos com apresentação de extratos de código)
-
-É responsável pela comunicação entre as duas máquinas. Contém, por isso, as funções que configuram, iniciam e terminam a ligaçao, assim como as que escrevem e lêem dados da porta de série, tratando das necessidades da comunicação - nomeadamente tratamento de erros e
-stuffing / destuffing de pacotes.
-
-O objectivo do protocolo de ligação de dados e fornecer um serviço de
-comunicação de dados fiável entre dois sistemas ligados por um meio (canal)
-de transmissão - neste caso, um cabo série.
-
-A camada de ligação de dados é responsável por:
-- Tratar das novas configuraçõoes da porta de série e ao mesmo tempo,guardar
-as configurações anteriores para as repor facilmente.
-- Estabelecer e terminar uma ligação através da porta de série.
-- Envio de comandos e, também, pelo envio e receçãao de mensagens
-através da porta de série.
-- Delimitação de tramas e processo de Stuffing e Destuffing dos packets
-recebidos da camada Application Layer - dados organizados em
-tramas (framing). A delimitação de tramas é feita por meio de uma
-sequência especial de oito bits (ag) e a transparência é assegurada
-pela técnica de byte stuffing.
-- Controlo de erros e de fluxo.
