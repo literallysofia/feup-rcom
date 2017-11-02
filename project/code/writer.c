@@ -1,5 +1,5 @@
 /*Non-Canonical Input Processing*/
-#include "writenoncanonical.h"
+#include "writer.h"
 
 int sumAlarms = 0;
 int flagAlarm = FALSE;
