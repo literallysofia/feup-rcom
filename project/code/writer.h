@@ -16,6 +16,7 @@
 #define TRUE 1
 
 #define NUMMAX 3
+#define TIMEOUT 3
 #define sizePacketConst 100
 #define bcc1ErrorPercentage 0
 #define bcc2ErrorPercentage 0
@@ -77,7 +78,7 @@ void stateMachineUA(int *state, unsigned char *c);
 * Espera por uma trama de supervisão e retorna o seu C.
 * Data link layer
 */
-unsigned char readControlMessage(int fd);
+unsigned char readControlMessageC(int fd);
 
 /*
 * Envia uma trama de supervisão, sendo o C recebido como argumento 

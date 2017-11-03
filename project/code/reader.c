@@ -2,11 +2,11 @@
 #include "reader.h"
 
 int esperado = 0;
+struct termios oldtio, newtio;
 
 int main(int argc, char **argv)
 {
   int fd;
-  struct termios oldtio, newtio;
   int sizeMessage = 0;
   unsigned char *mensagemPronta;
   int sizeOfStart = 0;
@@ -33,37 +33,6 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
-  if (tcgetattr(fd, &oldtio) == -1)
-  { /* save current port settings */
-    perror("tcgetattr");
-    exit(-1);
-  }
-
-  bzero(&newtio, sizeof(newtio));
-  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
-  newtio.c_iflag = IGNPAR;
-  newtio.c_oflag = 0;
-
-  /* set input mode (non-canonical, no echo,...) */
-  newtio.c_lflag = 0;
-
-  newtio.c_cc[VTIME] = 1; /* inter-character timer unused */
-  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
-
-  /*
-    VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
-    leitura do(s) próximo(s) caracter(es)
-  */
-
-  tcflush(fd, TCIOFLUSH);
-
-  printf("New termios structure set\n");
-
-  if (tcsetattr(fd, TCSANOW, &newtio) == -1)
-  {
-    perror("tcsetattr");
-    exit(-1);
-  }
 
   LLOPEN(fd);
   start = LLREAD(fd, &sizeOfStart);
@@ -104,7 +73,7 @@ int main(int argc, char **argv)
   LLCLOSE(fd);
 
   sleep(1);
-  tcsetattr(fd, TCSANOW, &oldtio);
+ 
   close(fd);
   return 0;
 }
@@ -118,10 +87,45 @@ void LLCLOSE(int fd)
   readControlMessage(fd, UA_C);
   printf("Recebeu UA\n");
   printf("Receiver terminated\n");
+
+  tcsetattr(fd, TCSANOW, &oldtio);
 }
 
 void LLOPEN(int fd)
 {
+
+if (tcgetattr(fd, &oldtio) == -1)
+  { /* save current port settings */
+    perror("tcgetattr");
+    exit(-1);
+  }
+
+  bzero(&newtio, sizeof(newtio));
+  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+  newtio.c_iflag = IGNPAR;
+  newtio.c_oflag = 0;
+
+  /* set input mode (non-canonical, no echo,...) */
+  newtio.c_lflag = 0;
+
+  newtio.c_cc[VTIME] = 1; /* inter-character timer unused */
+  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
+
+  /*
+    VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
+    leitura do(s) próximo(s) caracter(es)
+  */
+
+  tcflush(fd, TCIOFLUSH);
+
+  printf("New termios structure set\n");
+
+  if (tcsetattr(fd, TCSANOW, &newtio) == -1)
+  {
+    perror("tcsetattr");
+    exit(-1);
+  }
+
   if (readControlMessage(fd, SET_C))
   {
     printf("Recebeu SET\n");

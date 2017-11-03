@@ -8,6 +8,8 @@ int paragem = FALSE;
 unsigned char numMensagens = 0;
 int numTotalTramas = 0;
 
+struct termios oldtio, newtio;
+
 //handler do sinal de alarme
 void alarmHandler()
 {
@@ -19,7 +21,6 @@ void alarmHandler()
 int main(int argc, char **argv)
 {
   int fd;
-  struct termios oldtio, newtio;
   off_t sizeFile; //tamanho do ficheiro em bytes
   off_t indice = 0;
   int sizeControlPackageI = 0;
@@ -42,46 +43,16 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
-  if (tcgetattr(fd, &oldtio) == -1)
-  { /* save current port settings */
-    perror("tcgetattr");
-    exit(-1);
-  }
-
-  bzero(&newtio, sizeof(newtio));
-  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
-  newtio.c_iflag = IGNPAR;
-  newtio.c_oflag = 0;
-
-  /* set input mode (non-canonical, no echo,...) */
-  newtio.c_lflag = 0;
-
-  newtio.c_cc[VTIME] = 1; /* inter-unsigned character timer unused */
-  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 unsigned chars received */
-
-  /*
-  VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
-  leitura do(s) pr�ximo(s) caracter(es)
-  */
-
-  tcflush(fd, TCIOFLUSH);
-
-  //inicio do relógio
-  struct timespec requestStart, requestEnd;
-  clock_gettime(CLOCK_REALTIME, &requestStart);
-
-  if (tcsetattr(fd, TCSANOW, &newtio) == -1)
-  {
-    perror("tcsetattr");
-    exit(-1);
-  }
-
-  printf("New termios structure set\n");
 
   // instalar handler do alarme
   (void)signal(SIGALRM, alarmHandler);
 
+
   unsigned char *mensagem = openReadFile((unsigned char *)argv[2], &sizeFile);
+
+  //inicio do relógio
+  struct timespec requestStart, requestEnd;
+  clock_gettime(CLOCK_REALTIME, &requestStart);
 
   //se nao conseguirmos efetuar a ligaçao atraves do set e do ua o programa termina
   if (!LLOPEN(fd, 0))
@@ -130,11 +101,7 @@ int main(int argc, char **argv)
   printf("Seconds passed: %f\n", accum);
 
   sleep(1);
-  if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
-  {
-    perror("tcsetattr");
-    exit(-1);
-  }
+
 
   close(fd);
   return 0;
@@ -230,11 +197,47 @@ void stateMachineUA(int *state, unsigned char *c)
 int LLOPEN(int fd, int x)
 {
 
+  if (tcgetattr(fd, &oldtio) == -1)
+  { /* save current port settings */
+    perror("tcgetattr");
+    exit(-1);
+  }
+
+  bzero(&newtio, sizeof(newtio));
+  newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+  newtio.c_iflag = IGNPAR;
+  newtio.c_oflag = 0;
+
+  /* set input mode (non-canonical, no echo,...) */
+  newtio.c_lflag = 0;
+
+  newtio.c_cc[VTIME] = 1; /* inter-unsigned character timer unused */
+  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 unsigned chars received */
+
+  /*
+  VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a
+
+  leitura do(s) pr�ximo(s) caracter(es)
+
+  */
+
+  tcflush(fd, TCIOFLUSH);
+
+
+  if (tcsetattr(fd, TCSANOW, &newtio) == -1)
+  {
+    perror("tcsetattr");
+    exit(-1);
+  }
+
+  printf("New termios structure set\n");
+
+
   unsigned char c;
   do
   {
     sendControlMessage(fd, SET_C);
-    alarm(3);
+    alarm(TIMEOUT);
     flagAlarm = 0;
     int state = 0;
 
@@ -330,8 +333,8 @@ int LLWRITE(int fd, unsigned char *mensagem, int size)
     write(fd, copia, sizeMensagemFinal);
 
     flagAlarm = FALSE;
-    alarm(3);
-    unsigned char C = readControlMessage(fd);
+    alarm(TIMEOUT);
+    unsigned char C = readControlMessageC(fd);
     if ((C == CRR1 && trama == 0) || (C == CRR0 && trama == 1))
     {
       printf("Recebeu rr %x, trama = %d\n", C, trama);
@@ -367,7 +370,7 @@ void sendControlMessage(int fd, unsigned char C)
   write(fd, message, 5);
 }
 
-unsigned char readControlMessage(int fd)
+unsigned char readControlMessageC(int fd)
 {
   int state = 0;
   unsigned char c;
@@ -520,15 +523,21 @@ void LLCLOSE(int fd)
   printf("Mandou DISC\n");
   unsigned char C;
   //espera ler o DISC
-  C = readControlMessage(fd);
+  C = readControlMessageC(fd);
   while (C != DISC)
   {
-    C = readControlMessage(fd);
+    C = readControlMessageC(fd);
   }
-  printf("Leu disc\n");
+  printf("Leu DISC\n");
   sendControlMessage(fd, UA_C);
   printf("Mandou UA final\n");
   printf("Writer terminated \n");
+
+  if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+  {
+    perror("tcsetattr");
+    exit(-1);
+  }
 }
 
 unsigned char *messUpBCC2(unsigned char *packet, int sizePacket)
