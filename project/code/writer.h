@@ -63,7 +63,7 @@ unsigned char calculoBCC2(unsigned char *mensagem, int size);
 
 /*
 * Manda uma qualquer trama de controlo, sendo o C recebido a diferenca
-* Application layer
+* Data link layer
 */
 void sendControlMessage(int fd, unsigned char C);
 

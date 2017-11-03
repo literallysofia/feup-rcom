@@ -64,13 +64,13 @@ int checkBCC2(unsigned char *message, int sizeMessage);
 
 /*
 * Ciclo de leitura que fica a espera de ler uma trama de controlo em que C seja igual ao c recebido
-* Application layer
+* Data link layer
 */
 int readControlMessage(int fd, unsigned char C);
 
 /*
 * Manda uma qualquer trama de controlo, sendo o C recebido a diferenca
-* Application layer
+* Data link layer layer
 */
 void sendControlMessage(int fd, unsigned char C);
 

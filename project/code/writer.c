@@ -527,7 +527,7 @@ void LLCLOSE(int fd)
   }
   printf("Leu disc\n");
   sendControlMessage(fd, UA_C);
-  printf("Mandou ua final\n");
+  printf("Mandou UA final\n");
   printf("Writer terminated \n");
 }
 
