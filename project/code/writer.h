@@ -17,8 +17,8 @@
 
 #define NUMMAX 3
 #define sizePacketConst 100
-#define bcc2ErrorPercentage 0
 #define bcc1ErrorPercentage 0
+#define bcc2ErrorPercentage 0
 
 #define FLAG 0x7E
 #define A 0x03
