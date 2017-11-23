@@ -20,10 +20,13 @@ struct hostent *getip(char host[]);
 void createFile(unsigned char *mensagem, off_t *sizeFile, unsigned char filename[]);
 void parseArgument(char* argument,char* user,char* pass,char* host,char* path);
 int sendCommandInterpretResponse(int socketfd,char cmd[],char commandContent[]);
+int getServerPortFromResponse(int socketfd);
 
 int main(int argc, char** argv){
 	int	socketfd;
+	int	socketfdClient;
 	struct	sockaddr_in server_addr;
+	struct	sockaddr_in server_addr_client;
 	char	buf[] = "";
 	int	bytes;
 
@@ -86,16 +89,31 @@ int main(int argc, char** argv){
 		res = sendCommandInterpretResponse(socketfd,"pass ",pass);
 	}
 
+	write(socketfd,"pasv\n",5);
+	int serverPort = getServerPortFromResponse(socketfd);
 
+	/*server address handling*/
+	bzero((char*)&server_addr_client,sizeof(server_addr_client));
+	server_addr_client.sin_family = AF_INET;
+	server_addr_client.sin_addr.s_addr = inet_addr(inet_ntoa(*((struct in_addr *)h->h_addr)));	/*32 bit Internet address network byte ordered*/
+	server_addr_client.sin_port = htons(serverPort);		/*server TCP port must be network byte ordered */
 
-
-
-		/*send a string to the server*/
-		bytes = write(socketfd, buf, strlen(buf));
-		printf("Bytes escritos %d\n", bytes);
-
-		close(socketfd);
+	/*open an TCP socket*/
+	if ((socketfdClient = socket(AF_INET,SOCK_STREAM,0)) < 0) {
+		perror("socket()");
 		exit(0);
+	}
+	/*connect to the server*/
+	if(connect(socketfdClient,(struct sockaddr *)&server_addr_client,sizeof(server_addr_client)) < 0){
+			perror("connect()");
+			exit(0);
+		}
+
+		printf("Sending Retr\n");
+		sendCommandInterpretResponse(socketfd,"retr ",path);
+
+	close(socketfd);
+	exit(0);
 }
 
 
@@ -218,6 +236,69 @@ void readResponse(int socketfd, char* responseCode){
 	}
 }
 
+//reads the server port when pasv is sent
+int getServerPortFromResponse(int socketfd){
+	int state = 0;
+	int index = 0;
+	char firstByte [4];
+	memset(firstByte, 0,4);
+	char secondByte [4];
+	memset(secondByte, 0,4);
+
+	char c;
+
+	while (state != 7) {
+		read(socketfd,&c,1);
+		printf("%c",c);
+		switch (state) {
+			//waits for 3 digit number followed by ' '
+			case 0:
+				if(c == ' '){
+					if (index != 3) {
+						printf("Error receiving response code\n");
+						return -1;
+					}
+					index = 0;
+					state = 1;
+				}
+				else{
+					index++;
+				}
+				break;
+			case 5:
+				if(c == ','){
+					index = 0;
+					state++;
+				}
+				else{
+					firstByte[index]=c;
+					index++;
+				}
+				break;
+			case 6:
+				if(c == ')'){
+					state++;
+				}
+				else{
+					secondByte[index]=c;
+					index++;
+				}
+				break;
+			//reads until the first comma
+			default:
+			if(c == ','){
+				state++;
+			}
+			break;
+		}
+	}
+
+	int firstByteInt = atoi(firstByte);
+	int secondByteInt = atoi(secondByte);
+	return (firstByteInt*256 + secondByteInt);
+}
+
+//sends a command, reads the response from the server and interprets it
 int sendCommandInterpretResponse(int socketfd,char cmd[],char commandContent[]){
 	char responseCode[3];
 	int action = 0;
