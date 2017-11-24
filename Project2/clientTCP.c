@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <netdb.h>
 #include <strings.h>
+#include <ctype.h>
 
 #define SERVER_PORT 21
 #define SERVER_ADDR "192.168.28.96"
@@ -108,8 +109,7 @@ int main(int argc, char** argv){
 			perror("connect()");
 			exit(0);
 		}
-
-		printf("Sending Retr\n");
+		printf("\nSending Retr\n");
 		sendCommandInterpretResponse(socketfd,"retr ",path);
 
 	close(socketfd);
@@ -192,7 +192,7 @@ void readResponse(int socketfd, char* responseCode){
 
 	while (state != 3) {
 		read(socketfd,&c,1);
-		printf("%c",c);
+		printf("index %d  char %c \n",index,c);
 		switch (state) {
 			//waits for 3 digit number followed by ' ' or '-'
 			case 0:
@@ -208,8 +208,10 @@ void readResponse(int socketfd, char* responseCode){
 						state = 2;
 					}
 					else{
-						responseCode[index] = c;
-						index++;
+						if(isdigit(c)){
+							responseCode[index] = c;
+							index++;
+						}
 					}
 				}
 				break;
