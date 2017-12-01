@@ -15,22 +15,23 @@
 #define SERVER_PORT 21
 #define SERVER_ADDR "192.168.28.96"
 #define MAX_STRING_LENGTH 50
+#define SOCKET_BUF_SIZE 1000
 
 void readResponse(int socketfd, char *responseCode);
 struct hostent *getip(char host[]);
-void createFile(unsigned char *mensagem, off_t *sizeFile, unsigned char filename[]);
+void createFile(int fd, char* filename);
 void parseArgument(char *argument, char *user, char *pass, char *host, char *path);
-int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[]);
+int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[], char* filename, int socketfdClient);
 int getServerPortFromResponse(int socketfd);
+void parseFilename(char *path, char *filename);
+
 
 int main(int argc, char **argv)
 {
 	int socketfd;
-	int socketfdClient;
+	int socketfdClient =-1;
 	struct sockaddr_in server_addr;
 	struct sockaddr_in server_addr_client;
-	char buf[] = "";
-	int bytes;
 
 	struct hostent *h;
 
@@ -48,10 +49,14 @@ int main(int argc, char **argv)
 	memset(path, 0, MAX_STRING_LENGTH);
 	parseArgument(argv[1], user, pass, host, path);
 
+	char filename[MAX_STRING_LENGTH];
+	parseFilename(path, filename);
+
 	printf("user %s\n", user);
 	printf("pass %s\n", pass);
 	printf("host %s\n", host);
 	printf("path %s\n", path);
+	printf("filename %s\n", filename);
 
 	h = getip(host);
 
@@ -87,11 +92,11 @@ int main(int argc, char **argv)
 	////////////////////////////////////////////
 
 	printf("Sending Username\n");
-	int res = sendCommandInterpretResponse(socketfd, "user ", user);
+	int res = sendCommandInterpretResponse(socketfd, "user ", user, filename, socketfdClient);
 	if (res == 1)
 	{
 		printf("Sending Password\n");
-		res = sendCommandInterpretResponse(socketfd, "pass ", pass);
+		res = sendCommandInterpretResponse(socketfd, "pass ", pass, filename, socketfdClient);
 	}
 
 	write(socketfd, "pasv\n", 5);
@@ -116,10 +121,20 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 	printf("\nSending Retr\n");
-	sendCommandInterpretResponse(socketfd, "retr ", path);
+	int resRetr =sendCommandInterpretResponse(socketfd, "retr ", path, filename, socketfdClient);
 
+	if(resRetr==0){
+		close(socketfdClient);
+		close(socketfd);
+		exit(0);
+	}
+	else printf("ERROR in RETR response\n");
+
+	close(socketfdClient);
 	close(socketfd);
-	exit(0);
+	exit(1);
+
+	
 }
 
 // ./download ftp://anonymous:1@speedtest.tele2.net/1KB.zip
@@ -189,6 +204,24 @@ void parseArgument(char *argument, char *user, char *pass, char *host, char *pat
 	}
 }
 
+void parseFilename(char *path, char *filename){
+	int indexPath = 0;
+	int indexFilename = 0;
+
+	for(;indexPath< strlen(path); indexPath++){
+
+		if(path[indexPath]=='/'){
+			indexFilename = 0;
+			memset(filename, 0, MAX_STRING_LENGTH);
+			
+		}
+		else{
+			filename[indexFilename] = path[indexPath];
+			indexFilename++;
+		}
+	}
+}
+
 //gets ip address according to the host's name
 struct hostent *getip(char host[])
 {
@@ -213,7 +246,7 @@ void readResponse(int socketfd, char *responseCode)
 	while (state != 3)
 	{
 		read(socketfd, &c, 1);
-		printf("index %d  char %c \n", index, c);
+		printf("%c", c);
 		switch (state)
 		{
 		//waits for 3 digit number followed by ' ' or '-'
@@ -348,7 +381,7 @@ int getServerPortFromResponse(int socketfd)
 }
 
 //sends a command, reads the response from the server and interprets it
-int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[])
+int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[], char* filename, int socketfdClient)
 {
 	char responseCode[3];
 	int action = 0;
@@ -367,6 +400,10 @@ int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[]
 		{
 		//waits for another response
 		case 1:
+			if(strcmp(cmd, "retr ")==0){
+				createFile(socketfdClient, filename);
+				break;
+			}
 			readResponse(socketfd, responseCode);
 			break;
 		//command accepted, we can send another command
@@ -389,11 +426,17 @@ int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[]
 	}
 }
 
-void createFile(unsigned char *mensagem, off_t *sizeFile, unsigned char filename[])
+void createFile(int fd, char* filename)
 {
 	FILE *file = fopen((char *)filename, "wb+");
-	fwrite((void *)mensagem, 1, *sizeFile, file);
-	printf("%zd\n", *sizeFile);
-	printf("New file created\n");
-	fclose(file);
+
+	char bufSocket[SOCKET_BUF_SIZE];
+ 	int bytes;
+ 	while ((bytes = read(fd, bufSocket, SOCKET_BUF_SIZE))>0) {
+    	bytes = fwrite(bufSocket, bytes, 1, file);
+    }
+
+  	fclose(file);
+
+	printf("Finished downloading file\n");
 }
