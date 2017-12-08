@@ -207,8 +207,11 @@ void parseArgument(char *argument, char *user, char *pass, char *host, char *pat
 void parseFilename(char *path, char *filename){
 	int indexPath = 0;
 	int indexFilename = 0;
+	memset(filename, 0, MAX_STRING_LENGTH);
 
 	for(;indexPath< strlen(path); indexPath++){
+		printf("index file name: %d\n", indexFilename);
+		printf("filename: %s\n",filename);
 
 		if(path[indexPath]=='/'){
 			indexFilename = 0;
@@ -244,7 +247,7 @@ void readResponse(int socketfd, char *responseCode)
 	char c;
 
 	while (state != 3)
-	{
+	{	
 		read(socketfd, &c, 1);
 		printf("%c", c);
 		switch (state)
@@ -266,6 +269,7 @@ void readResponse(int socketfd, char *responseCode)
 				if (c == '-')
 				{
 					state = 2;
+					index=0;
 				}
 				else
 				{
@@ -296,11 +300,14 @@ void readResponse(int socketfd, char *responseCode)
 				{
 					state = 1;
 				}
-				else
+				else 
 				{
-					printf("Error receiving response code\n");
-					return;
+				  if(index==3 && c=='-'){
+					index=0;
+					
 				}
+				}
+				
 			}
 			break;
 		}
