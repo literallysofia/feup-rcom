@@ -52,15 +52,15 @@ int main(int argc, char **argv)
 	char filename[MAX_STRING_LENGTH];
 	parseFilename(path, filename);
 
-	printf("user %s\n", user);
-	printf("pass %s\n", pass);
-	printf("host %s\n", host);
-	printf("path %s\n", path);
-	printf("filename %s\n", filename);
+	printf(" - Username: %s\n", user);
+	printf(" - Password: %s\n", pass);
+	printf(" - Host: %s\n", host);
+	printf(" - Path :%s\n", path);
+	printf(" - Filename: %s\n", filename);
 
 	h = getip(host);
 
-	printf("IP Address : %s\n", inet_ntoa(*((struct in_addr *)h->h_addr)));
+	printf(" - IP Address : %s\n\n", inet_ntoa(*((struct in_addr *)h->h_addr)));
 
 	/*server address handling*/
 	bzero((char *)&server_addr, sizeof(server_addr));
@@ -87,15 +87,15 @@ int main(int argc, char **argv)
 	readResponse(socketfd, responseCode); //
 	if (responseCode[0] == '2')
 	{										 //
-		printf("Connection Estabilished\n"); //
+		printf(" > Connection Estabilished\n"); //
 	}										 //
 	////////////////////////////////////////////
 
-	printf("Sending Username\n");
+	printf(" > Sending Username\n");
 	int res = sendCommandInterpretResponse(socketfd, "user ", user, filename, socketfdClient);
 	if (res == 1)
 	{
-		printf("Sending Password\n");
+		printf(" > Sending Password\n");
 		res = sendCommandInterpretResponse(socketfd, "pass ", pass, filename, socketfdClient);
 	}
 
@@ -120,7 +120,7 @@ int main(int argc, char **argv)
 		perror("connect()");
 		exit(0);
 	}
-	printf("\nSending Retr\n");
+	printf("\n > Sending Retr\n");
 	int resRetr =sendCommandInterpretResponse(socketfd, "retr ", path, filename, socketfdClient);
 
 	if(resRetr==0){
@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 		close(socketfd);
 		exit(0);
 	}
-	else printf("ERROR in RETR response\n");
+	else printf(" > ERROR in RETR response\n");
 
 	close(socketfdClient);
 	close(socketfd);
@@ -157,7 +157,7 @@ void parseArgument(char *argument, char *user, char *pass, char *host, char *pat
 			if (i == 5 && argument[i] == start[i])
 				state = 1;
 			else
-				printf("Error parsing ftp://");
+				printf(" > Error parsing ftp://");
 			break;
 		case 1: //reads the username
 			if (argument[i] == ':')
@@ -210,8 +210,6 @@ void parseFilename(char *path, char *filename){
 	memset(filename, 0, MAX_STRING_LENGTH);
 
 	for(;indexPath< strlen(path); indexPath++){
-		printf("index file name: %d\n", indexFilename);
-		printf("filename: %s\n",filename);
 
 		if(path[indexPath]=='/'){
 			indexFilename = 0;
@@ -258,7 +256,7 @@ void readResponse(int socketfd, char *responseCode)
 			{
 				if (index != 3)
 				{
-					printf("Error receiving response code\n");
+					printf(" > Error receiving response code\n");
 					return;
 				}
 				index = 0;
@@ -338,7 +336,7 @@ int getServerPortFromResponse(int socketfd)
 			{
 				if (index != 3)
 				{
-					printf("Error receiving response code\n");
+					printf(" > Error receiving response code\n");
 					return -1;
 				}
 				index = 0;
@@ -426,7 +424,7 @@ int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[]
 			write(socketfd, "\n", 1);
 			break;
 		case 5:
-			printf("Command wasn\'t accepted!\n Goodbye");
+			printf(" > Command wasn\'t accepted. Goodbye!\n");
 			close(socketfd);
 			exit(-1);
 		}
@@ -445,5 +443,5 @@ void createFile(int fd, char* filename)
 
   	fclose(file);
 
-	printf("Finished downloading file\n");
+	printf(" > Finished downloading file\n");
 }
