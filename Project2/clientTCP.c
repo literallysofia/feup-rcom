@@ -421,7 +421,7 @@ int sendCommandInterpretResponse(int socketfd, char cmd[], char commandContent[]
 		case 4:
 			write(socketfd, cmd, strlen(cmd));
 			write(socketfd, commandContent, strlen(commandContent));
-			write(socketfd, "\n", 1);
+			write(socketfd, "\r\n", 2);
 			break;
 		case 5:
 			printf(" > Command wasn\'t accepted. Goodbye!\n");
