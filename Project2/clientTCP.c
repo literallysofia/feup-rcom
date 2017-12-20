@@ -81,15 +81,11 @@ int main(int argc, char **argv)
 		exit(0);
 	}
 
-	////////////////////////////////////////////
-	//Aqui so temos em conta se a responsta foi
-	//positiva, nao sei como fazer se nao for //
-	readResponse(socketfd, responseCode); //
+	readResponse(socketfd, responseCode); 
 	if (responseCode[0] == '2')
-	{										 //
-		printf(" > Connection Estabilished\n"); //
-	}										 //
-	////////////////////////////////////////////
+	{										 
+		printf(" > Connection Estabilished\n"); 
+	}										 
 
 	printf(" > Sending Username\n");
 	int res = sendCommandInterpretResponse(socketfd, "user ", user, filename, socketfdClient);
