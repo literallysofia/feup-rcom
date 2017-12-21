@@ -1,4 +1,3 @@
-/*      (C)2000 FEUP  */
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
